@@ -1212,13 +1212,44 @@ foreach ($programmeYearSemester as $row) {
                     });
                 };
                 
+                // Store reference to field for escape handler
+                const fieldElement = this;
+                
                 // For select elements, save on change instead of blur
                 if (input.tagName === 'SELECT') {
+                    // Don't save on blur for selects - only on change
                     input.addEventListener('change', function() {
                         // Small delay to allow selection to register
                         setTimeout(() => {
-                            saveField();
+                            if (!isSaving) {
+                                saveField();
+                            }
                         }, 100);
+                    });
+                    
+                    // Add a save button for selects
+                    const saveBtn = document.createElement('button');
+                    saveBtn.textContent = '✓';
+                    saveBtn.style.cssText = 'margin-left: 4px; padding: 4px 8px; background: #667eea; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 12px;';
+                    saveBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        if (!isSaving) {
+                            saveField();
+                        }
+                    };
+                    fieldElement.appendChild(saveBtn);
+                    
+                    // Also allow Enter key to save
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (!isSaving) {
+                                saveField();
+                            }
+                        } else if (e.key === 'Escape') {
+                            isSaving = false;
+                            fieldElement.innerHTML = originalHTML;
+                        }
                     });
                 } else {
                     // For input elements, save on blur
@@ -1229,22 +1260,29 @@ foreach ($programmeYearSemester as $row) {
                             }
                         }, 200);
                     });
+                    
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (!isSaving) {
+                                saveField();
+                            }
+                        } else if (e.key === 'Escape') {
+                            isSaving = false;
+                            fieldElement.innerHTML = originalHTML;
+                        }
+                    });
                 }
-                
-                input.addEventListener('keydown', function(e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        saveField();
-                    } else if (e.key === 'Escape') {
-                        isSaving = false;
-                        field.innerHTML = originalHTML;
-                    }
-                });
                 
                 // Prevent blur when clicking inside the input/select
                 input.addEventListener('mousedown', function(e) {
                     e.stopPropagation();
                 });
+                
+                // Prevent the field click event from bubbling
+                fieldElement.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                }, true);
             });
         });
     </script>
