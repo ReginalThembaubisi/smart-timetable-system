@@ -1116,10 +1116,22 @@ foreach ($programmeYearSemester as $row) {
                 // Replace span with input
                 this.innerHTML = '';
                 this.appendChild(input);
-                input.focus();
+                
+                // Prevent immediate blur when clicking on select/input
+                let isSaving = false;
+                
+                // Focus after a small delay to ensure it's clickable
+                setTimeout(() => {
+                    input.focus();
+                    if (input.tagName === 'SELECT') {
+                        input.click(); // Open dropdown for select elements
+                    }
+                }, 10);
                 
                 // Handle save on blur or Enter
                 const saveField = () => {
+                    if (isSaving) return;
+                    isSaving = true;
                     let value = input.value;
                     let lecturerId = this.dataset.lecturerId || '';
                     let venueId = this.dataset.venueId || '';
@@ -1200,14 +1212,38 @@ foreach ($programmeYearSemester as $row) {
                     });
                 };
                 
-                input.addEventListener('blur', saveField);
+                // For select elements, save on change instead of blur
+                if (input.tagName === 'SELECT') {
+                    input.addEventListener('change', function() {
+                        // Small delay to allow selection to register
+                        setTimeout(() => {
+                            saveField();
+                        }, 100);
+                    });
+                } else {
+                    // For input elements, save on blur
+                    input.addEventListener('blur', function() {
+                        setTimeout(() => {
+                            if (!isSaving) {
+                                saveField();
+                            }
+                        }, 200);
+                    });
+                }
+                
                 input.addEventListener('keydown', function(e) {
                     if (e.key === 'Enter') {
                         e.preventDefault();
                         saveField();
                     } else if (e.key === 'Escape') {
-                        this.innerHTML = originalHTML;
+                        isSaving = false;
+                        field.innerHTML = originalHTML;
                     }
+                });
+                
+                // Prevent blur when clicking inside the input/select
+                input.addEventListener('mousedown', function(e) {
+                    e.stopPropagation();
                 });
             });
         });
