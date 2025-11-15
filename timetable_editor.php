@@ -730,13 +730,100 @@ foreach ($programmeYearSemester as $row) {
             checkboxes.forEach(cb => cb.checked = selectAll.checked);
         }
         
+        // Filter data from PHP
+        const filterData = <?= json_encode($filterData) ?>;
+        
+        const programmeSelect = document.getElementById('programmeFilter');
+        const yearSelect = document.getElementById('yearFilter');
+        const semesterSelect = document.getElementById('semesterFilter');
+        
+        // Initialize: If programme is already selected on page load, populate years
+        if (programmeSelect && programmeSelect.value && filterData[programmeSelect.value]) {
+            const years = Object.keys(filterData[programmeSelect.value]).sort();
+            years.forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                if (yearSelect.querySelector(`option[value="${year}"]`)) {
+                    yearSelect.querySelector(`option[value="${year}"]`).selected = true;
+                } else {
+                    yearSelect.appendChild(option);
+                }
+            });
+            
+            // If year is also selected, populate semesters
+            if (yearSelect.value && filterData[programmeSelect.value][yearSelect.value]) {
+                const semesters = filterData[programmeSelect.value][yearSelect.value].sort();
+                semesters.forEach(semester => {
+                    const option = document.createElement('option');
+                    option.value = semester;
+                    option.textContent = semester;
+                    if (semesterSelect.querySelector(`option[value="${semester}"]`)) {
+                        semesterSelect.querySelector(`option[value="${semester}"]`).selected = true;
+                    } else {
+                        semesterSelect.appendChild(option);
+                    }
+                });
+            }
+        }
+        
+        // Update year dropdown when programme changes
+        if (programmeSelect) {
+            programmeSelect.addEventListener('change', function() {
+                const selectedProgramme = this.value;
+                
+                // Clear year and semester
+                yearSelect.innerHTML = '<option value="">All Years</option>';
+                semesterSelect.innerHTML = '<option value="">All Semesters</option>';
+                
+                if (selectedProgramme && filterData[selectedProgramme]) {
+                    // Get years for selected programme
+                    const years = Object.keys(filterData[selectedProgramme]).sort();
+                    years.forEach(year => {
+                        const option = document.createElement('option');
+                        option.value = year;
+                        option.textContent = year;
+                        yearSelect.appendChild(option);
+                    });
+                }
+            });
+        }
+        
+        // Update semester dropdown when year changes
+        if (yearSelect) {
+            yearSelect.addEventListener('change', function() {
+                const selectedProgramme = programmeSelect ? programmeSelect.value : '';
+                const selectedYear = this.value;
+                
+                // Clear semester
+                semesterSelect.innerHTML = '<option value="">All Semesters</option>';
+                
+                if (selectedProgramme && selectedYear && filterData[selectedProgramme] && filterData[selectedProgramme][selectedYear]) {
+                    // Get semesters for selected programme and year
+                    const semesters = filterData[selectedProgramme][selectedYear].sort();
+                    semesters.forEach(semester => {
+                        const option = document.createElement('option');
+                        option.value = semester;
+                        option.textContent = semester;
+                        semesterSelect.appendChild(option);
+                    });
+                }
+            });
+        }
+        
         function applyFilters() {
             const programme = document.getElementById('programmeFilter').value;
+            const year = document.getElementById('yearFilter').value;
+            const semester = document.getElementById('semesterFilter').value;
             const search = document.getElementById('searchFilter').value;
+            
             const params = new URLSearchParams();
             if (programme) params.append('programme', programme);
+            if (year) params.append('year', year);
+            if (semester) params.append('semester', semester);
             if (search) params.append('search', search);
-            window.location.href = 'timetable_editor.php?' + params.toString();
+            
+            window.location.href = 'timetable_editor.php' + (params.toString() ? '?' + params.toString() : '');
         }
         
         function openEditLecturerModal(lecturerId, lecturerName) {
