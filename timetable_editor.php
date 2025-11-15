@@ -1038,7 +1038,7 @@ foreach ($programmeYearSemester as $row) {
             }
         }
         
-        // Update year dropdown when programme changes (optional - can filter or show all)
+        // Update year dropdown when programme changes and auto-apply filters
         if (programmeSelect) {
             programmeSelect.addEventListener('change', function() {
                 const selectedProgramme = this.value;
@@ -1084,10 +1084,13 @@ foreach ($programmeYearSemester as $row) {
                         });
                     }
                 }
+                
+                // Auto-apply filters when programme changes
+                applyFilters();
             });
         }
         
-        // Update semester dropdown when year changes
+        // Update semester dropdown when year changes and auto-apply filters
         if (yearSelect) {
             yearSelect.addEventListener('change', function() {
                 const selectedProgramme = programmeSelect ? programmeSelect.value : '';
@@ -1130,6 +1133,16 @@ foreach ($programmeYearSemester as $row) {
                         });
                     }
                 }
+                
+                // Auto-apply filters when year changes
+                applyFilters();
+            });
+        }
+        
+        // Auto-apply filters when semester changes
+        if (semesterSelect) {
+            semesterSelect.addEventListener('change', function() {
+                applyFilters();
             });
         }
         
