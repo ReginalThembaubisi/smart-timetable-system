@@ -676,6 +676,55 @@ $totalSessions = count($sessions);
             <?php endif; ?>
         </div>
     </div>
+    
+    <script>
+        // Filter data from PHP
+        const filterData = <?= json_encode($filterData) ?>;
+        
+        const programmeSelect = document.querySelector('select[name="programme"]');
+        const yearSelect = document.getElementById('yearFilter');
+        const semesterSelect = document.getElementById('semesterFilter');
+        
+        // Update year dropdown when programme changes
+        programmeSelect.addEventListener('change', function() {
+            const selectedProgramme = this.value;
+            
+            // Clear year and semester
+            yearSelect.innerHTML = '<option value="">All Years</option>';
+            semesterSelect.innerHTML = '<option value="">All Semesters</option>';
+            
+            if (selectedProgramme && filterData[selectedProgramme]) {
+                // Get years for selected programme
+                const years = Object.keys(filterData[selectedProgramme]).sort();
+                years.forEach(year => {
+                    const option = document.createElement('option');
+                    option.value = year;
+                    option.textContent = year;
+                    yearSelect.appendChild(option);
+                });
+            }
+        });
+        
+        // Update semester dropdown when year changes
+        yearSelect.addEventListener('change', function() {
+            const selectedProgramme = programmeSelect.value;
+            const selectedYear = this.value;
+            
+            // Clear semester
+            semesterSelect.innerHTML = '<option value="">All Semesters</option>';
+            
+            if (selectedProgramme && selectedYear && filterData[selectedProgramme] && filterData[selectedProgramme][selectedYear]) {
+                // Get semesters for selected programme and year
+                const semesters = filterData[selectedProgramme][selectedYear].sort();
+                semesters.forEach(semester => {
+                    const option = document.createElement('option');
+                    option.value = semester;
+                    option.textContent = semester;
+                    semesterSelect.appendChild(option);
+                });
+            }
+        });
+    </script>
 </body>
 </html>
 
