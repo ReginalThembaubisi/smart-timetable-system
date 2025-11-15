@@ -30,9 +30,6 @@ $programmeFilter = $_GET['programme'] ?? '';
 $yearFilter = $_GET['year'] ?? '';
 $semesterFilter = $_GET['semester'] ?? '';
 $dayFilter = $_GET['day'] ?? '';
-$moduleFilter = $_GET['module'] ?? '';
-$lecturerFilter = $_GET['lecturer'] ?? '';
-$venueFilter = $_GET['venue'] ?? '';
 
 // Build query
 $query = "
@@ -66,23 +63,6 @@ if ($dayFilter) {
     $params[] = $dayFilter;
 }
 
-if ($moduleFilter) {
-    $query .= " AND (m.module_code LIKE ? OR m.module_name LIKE ?)";
-    $searchTerm = "%{$moduleFilter}%";
-    $params[] = $searchTerm;
-    $params[] = $searchTerm;
-}
-
-if ($lecturerFilter) {
-    $query .= " AND l.lecturer_name LIKE ?";
-    $params[] = "%{$lecturerFilter}%";
-}
-
-if ($venueFilter) {
-    $query .= " AND v.venue_name LIKE ?";
-    $params[] = "%{$venueFilter}%";
-}
-
 $query .= " ORDER BY 
     CASE s.day_of_week
         WHEN 'Monday' THEN 1
@@ -105,9 +85,6 @@ $programmes = $pdo->query("SELECT DISTINCT programme FROM sessions WHERE program
 $years = $pdo->query("SELECT DISTINCT year_level FROM sessions WHERE year_level IS NOT NULL AND year_level != '' ORDER BY year_level")->fetchAll(PDO::FETCH_COLUMN);
 $semesters = $pdo->query("SELECT DISTINCT semester FROM sessions WHERE semester IS NOT NULL AND semester != '' ORDER BY semester")->fetchAll(PDO::FETCH_COLUMN);
 $days = $pdo->query("SELECT DISTINCT day_of_week FROM sessions ORDER BY day_of_week")->fetchAll(PDO::FETCH_COLUMN);
-$modules = $pdo->query("SELECT DISTINCT module_code FROM modules ORDER BY module_code")->fetchAll(PDO::FETCH_COLUMN);
-$lecturers = $pdo->query("SELECT DISTINCT lecturer_name FROM lecturers WHERE lecturer_name IS NOT NULL ORDER BY lecturer_name")->fetchAll(PDO::FETCH_COLUMN);
-$venues = $pdo->query("SELECT DISTINCT venue_name FROM venues WHERE venue_name IS NOT NULL ORDER BY venue_name")->fetchAll(PDO::FETCH_COLUMN);
 
 // Group sessions by day
 $sessionsByDay = [];
@@ -551,21 +528,6 @@ $totalSessions = count($sessions);
                     </select>
                 </div>
                 
-                <div class="filter-group">
-                    <label>Module</label>
-                    <input type="text" name="module" placeholder="Module code or name" value="<?= htmlspecialchars($moduleFilter) ?>">
-                </div>
-                
-                <div class="filter-group">
-                    <label>Lecturer</label>
-                    <input type="text" name="lecturer" placeholder="Lecturer name" value="<?= htmlspecialchars($lecturerFilter) ?>">
-                </div>
-                
-                <div class="filter-group">
-                    <label>Venue</label>
-                    <input type="text" name="venue" placeholder="Venue name" value="<?= htmlspecialchars($venueFilter) ?>">
-                </div>
-                
                 <div class="filter-actions">
                     <button type="submit" class="btn btn-primary">Apply Filters</button>
                     <a href="view_timetable.php" class="btn btn-secondary">Clear</a>
@@ -576,7 +538,7 @@ $totalSessions = count($sessions);
             <div class="summary">
                 <div class="summary-text">
                     Showing <span class="summary-count"><?= $totalSessions ?></span> session<?= $totalSessions !== 1 ? 's' : '' ?>
-                    <?php if ($programmeFilter || $yearFilter || $semesterFilter || $dayFilter || $moduleFilter || $lecturerFilter || $venueFilter): ?>
+                    <?php if ($programmeFilter || $yearFilter || $semesterFilter || $dayFilter): ?>
                         (filtered)
                     <?php endif; ?>
                     <?php if ($programmeFilter): ?>
