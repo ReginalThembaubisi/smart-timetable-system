@@ -578,9 +578,51 @@ foreach ($programmeYearSemester as $row) {
                 <div class="filter-group">
                     <label>Programme</label>
                     <select name="programme" id="programmeFilter">
-                        <option value="">All programmes</option>
+                        <option value="">All Programmes</option>
+                        <?php foreach ($programmes as $programme): ?>
+                            <option value="<?= htmlspecialchars($programme) ?>" <?= $programmeFilter === $programme ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($programme) ?>
+                            </option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
+                
+                <div class="filter-group">
+                    <label>Year Level</label>
+                    <select name="year" id="yearFilter">
+                        <option value="">All Years</option>
+                        <?php 
+                        if ($programmeFilter && isset($filterData[$programmeFilter])) {
+                            $yearsForProgramme = array_keys($filterData[$programmeFilter]);
+                            sort($yearsForProgramme);
+                            foreach ($yearsForProgramme as $year): ?>
+                                <option value="<?= htmlspecialchars($year) ?>" <?= $yearFilter === $year ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($year) ?>
+                                </option>
+                            <?php endforeach;
+                        }
+                        ?>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Semester</label>
+                    <select name="semester" id="semesterFilter">
+                        <option value="">All Semesters</option>
+                        <?php 
+                        if ($programmeFilter && $yearFilter && isset($filterData[$programmeFilter][$yearFilter])) {
+                            $semestersForProgrammeYear = $filterData[$programmeFilter][$yearFilter];
+                            sort($semestersForProgrammeYear);
+                            foreach ($semestersForProgrammeYear as $semester): ?>
+                                <option value="<?= htmlspecialchars($semester) ?>" <?= $semesterFilter === $semester ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($semester) ?>
+                                </option>
+                            <?php endforeach;
+                        }
+                        ?>
+                    </select>
+                </div>
+                
                 <div class="filter-group" style="flex: 2;">
                     <label>Search</label>
                     <input type="text" id="searchFilter" placeholder="Module, lecturer, venue..." value="<?= htmlspecialchars($searchFilter) ?>">
