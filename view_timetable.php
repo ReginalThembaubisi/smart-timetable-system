@@ -10,6 +10,21 @@ require_once 'admin/config.php';
 $pdo = new PDO("mysql:host=localhost;dbname=smart_timetable", "root", "");
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+// Ensure programme, year_level, and semester columns exist
+try {
+    $columns = $pdo->query("SHOW COLUMNS FROM sessions LIKE 'programme'")->fetch();
+    if (!$columns) {
+        $pdo->exec("ALTER TABLE sessions ADD COLUMN programme VARCHAR(255) NULL AFTER session_id");
+        $pdo->exec("ALTER TABLE sessions ADD COLUMN year_level VARCHAR(50) NULL AFTER programme");
+        $pdo->exec("ALTER TABLE sessions ADD COLUMN semester VARCHAR(50) NULL AFTER year_level");
+        $pdo->exec("ALTER TABLE sessions ADD INDEX idx_programme (programme)");
+        $pdo->exec("ALTER TABLE sessions ADD INDEX idx_year_level (year_level)");
+        $pdo->exec("ALTER TABLE sessions ADD INDEX idx_semester (semester)");
+    }
+} catch (PDOException $e) {
+    // Columns might already exist, ignore error
+}
+
 // Get filter values
 $programmeFilter = $_GET['programme'] ?? '';
 $yearFilter = $_GET['year'] ?? '';
