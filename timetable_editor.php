@@ -490,7 +490,7 @@ $modules = $pdo->query("SELECT * FROM modules ORDER BY module_code")->fetchAll(P
                     <a href="admin/modules.php"><i>📚</i> Modules</a>
                     <a href="admin/timetable.php"><i>➕</i> Add Session</a>
                     <a href="timetable_editor.php" class="active"><i>✏️</i> Edit Sessions</a>
-                    <a href="#"><i>📋</i> View Timetable</a>
+                    <a href="view_timetable.php"><i>📋</i> View Timetable</a>
                     <a href="timetable_pdf_parser.php"><i>📤</i> Upload Timetable</a>
                     <a href="admin/exams.php"><i>📆</i> Exam Timetables</a>
                 </nav>
