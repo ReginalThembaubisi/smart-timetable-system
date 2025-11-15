@@ -961,7 +961,7 @@ foreach ($programmeYearSemester as $row) {
         document.addEventListener('DOMContentLoaded', function() {
         
         // Filter data from PHP
-        const filterData = <?= json_encode($filterData) ?>;
+        const filterData = <?= json_encode($filterData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         
         const programmeSelect = document.getElementById('programmeFilter');
         const yearSelect = document.getElementById('yearFilter');
