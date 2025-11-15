@@ -499,6 +499,12 @@ $modules = $pdo->query("SELECT * FROM modules ORDER BY module_code")->fetchAll(P
         
         <!-- Main Content -->
         <div class="main-content">
+            <div style="margin-bottom: 24px;">
+                <a href="dashboard.php" style="display: inline-flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 8px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; transition: all 0.2s;" onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'; this.style.borderColor='rgba(102, 126, 234, 0.3)'; this.style.color='#667eea';" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='rgba(255,255,255,0.1)'; this.style.color='rgba(255,255,255,0.7)';">
+                    <span>←</span>
+                    <span>Back to Dashboard</span>
+                </a>
+            </div>
             <div class="page-header">
                 <h1>Timetable Editor</h1>
                 <p>Edit, update, and manage timetable sessions with bulk operations</p>

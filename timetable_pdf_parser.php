@@ -564,6 +564,12 @@ function parseTimetableFile($content, $pdo) {
             background: rgba(102, 126, 234, 0.2);
             color: #667eea;
         }
+        .sidebar-nav a i {
+            margin-right: 12px;
+            width: 20px;
+            font-style: normal;
+            font-size: 16px;
+        }
         
         /* Main Content */
         .main-content {
@@ -733,44 +739,50 @@ function parseTimetableFile($content, $pdo) {
             <div class="sidebar-section">
                 <div class="sidebar-section-title">Overview</div>
                 <nav class="sidebar-nav">
-                    <a href="dashboard.php">📊 Dashboard</a>
+                    <a href="dashboard.php"><i>📊</i> Dashboard</a>
                 </nav>
             </div>
             
             <div class="sidebar-section">
                 <div class="sidebar-section-title">Academic Structure</div>
                 <nav class="sidebar-nav">
-                    <a href="#">🏛️ Faculties</a>
-                    <a href="#">🏫 Schools</a>
-                    <a href="#">📜 Programmes</a>
-                    <a href="#">📅 Academic Years</a>
+                    <a href="#"><i>🏛️</i> Faculties</a>
+                    <a href="#"><i>🏫</i> Schools</a>
+                    <a href="#"><i>📜</i> Programmes</a>
+                    <a href="#"><i>📅</i> Academic Years</a>
                 </nav>
             </div>
             
             <div class="sidebar-section">
                 <div class="sidebar-section-title">People & Resources</div>
                 <nav class="sidebar-nav">
-                    <a href="students.php">👥 Students</a>
-                    <a href="admin/lecturers.php">👤 Lecturers</a>
-                    <a href="admin/venues.php">📍 Venues</a>
+                    <a href="students.php"><i>👥</i> Students</a>
+                    <a href="admin/lecturers.php"><i>👤</i> Lecturers</a>
+                    <a href="admin/venues.php"><i>📍</i> Venues</a>
                 </nav>
             </div>
             
             <div class="sidebar-section">
                 <div class="sidebar-section-title">Curriculum & Timetable</div>
                 <nav class="sidebar-nav">
-                    <a href="admin/modules.php">📚 Modules</a>
-                    <a href="admin/timetable.php">➕ Add Session</a>
-                    <a href="timetable_editor.php">✏️ Edit Sessions</a>
-                    <a href="#">📋 View Timetable</a>
-                    <a href="timetable_pdf_parser.php" class="active">📤 Upload Timetable</a>
-                    <a href="admin/exams.php">📆 Exam Timetables</a>
+                    <a href="admin/modules.php"><i>📚</i> Modules</a>
+                    <a href="admin/timetable.php"><i>➕</i> Add Session</a>
+                    <a href="timetable_editor.php"><i>✏️</i> Edit Sessions</a>
+                    <a href="#"><i>📋</i> View Timetable</a>
+                    <a href="timetable_pdf_parser.php" class="active"><i>📤</i> Upload Timetable</a>
+                    <a href="admin/exams.php"><i>📆</i> Exam Timetables</a>
                 </nav>
             </div>
         </div>
         
         <!-- Main Content -->
         <div class="main-content">
+            <div style="margin-bottom: 24px;">
+                <a href="dashboard.php" style="display: inline-flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 8px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; transition: all 0.2s;" onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'; this.style.borderColor='rgba(102, 126, 234, 0.3)'; this.style.color='#667eea';" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='rgba(255,255,255,0.1)'; this.style.color='rgba(255,255,255,0.7)';">
+                    <span>←</span>
+                    <span>Back to Dashboard</span>
+                </a>
+            </div>
             <div class="upload-card">
                 <h2>Upload PDFs Or TXT Files For Instant Parsing</h2>
                 <p>Our universal parser auto-detects SESSION and CELCAT formats. Drop the official timetable file here and we will populate programmes, modules, venues and sessions automatically.</p>
