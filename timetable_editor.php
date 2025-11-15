@@ -1082,8 +1082,14 @@ foreach ($programmeYearSemester as $row) {
         const lecturersList = <?= json_encode(array_column($lecturers, 'lecturer_name', 'lecturer_id')) ?>;
         const venuesList = <?= json_encode(array_column($venues, 'venue_name', 'venue_id')) ?>;
         
-        document.querySelectorAll('.editable-field').forEach(field => {
-            field.addEventListener('click', function() {
+        // Make sure editable fields are clickable
+        const editableFields = document.querySelectorAll('.editable-field');
+        console.log('Found', editableFields.length, 'editable fields');
+        
+        editableFields.forEach(field => {
+            field.addEventListener('click', function(e) {
+                e.stopPropagation(); // Prevent event bubbling
+                console.log('Editable field clicked:', this.dataset.field);
                 const fieldType = this.dataset.field;
                 const sessionId = this.dataset.sessionId;
                 const currentValue = this.dataset.currentValue;
