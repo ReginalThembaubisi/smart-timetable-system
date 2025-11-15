@@ -920,33 +920,49 @@ foreach ($programmeYearSemester as $row) {
         const yearSelect = document.getElementById('yearFilter');
         const semesterSelect = document.getElementById('semesterFilter');
         
-        // Initialize: If programme is already selected on page load, populate years
-        if (programmeSelect && programmeSelect.value && filterData[programmeSelect.value]) {
-            const years = Object.keys(filterData[programmeSelect.value]).sort();
-            years.forEach(year => {
-                const option = document.createElement('option');
-                option.value = year;
-                option.textContent = year;
-                if (yearSelect.querySelector(`option[value="${year}"]`)) {
-                    yearSelect.querySelector(`option[value="${year}"]`).selected = true;
-                } else {
-                    yearSelect.appendChild(option);
-                }
-            });
+        // Function to populate year dropdown
+        function populateYears(programme) {
+            if (!yearSelect) return;
             
-            // If year is also selected, populate semesters
-            if (yearSelect.value && filterData[programmeSelect.value][yearSelect.value]) {
-                const semesters = filterData[programmeSelect.value][yearSelect.value].sort();
+            // Clear existing options except "All Years"
+            yearSelect.innerHTML = '<option value="">All Years</option>';
+            
+            if (programme && filterData[programme]) {
+                const years = Object.keys(filterData[programme]).sort();
+                years.forEach(year => {
+                    const option = document.createElement('option');
+                    option.value = year;
+                    option.textContent = year;
+                    yearSelect.appendChild(option);
+                });
+            }
+        }
+        
+        // Function to populate semester dropdown
+        function populateSemesters(programme, year) {
+            if (!semesterSelect) return;
+            
+            // Clear existing options except "All Semesters"
+            semesterSelect.innerHTML = '<option value="">All Semesters</option>';
+            
+            if (programme && year && filterData[programme] && filterData[programme][year]) {
+                const semesters = filterData[programme][year].sort();
                 semesters.forEach(semester => {
                     const option = document.createElement('option');
                     option.value = semester;
                     option.textContent = semester;
-                    if (semesterSelect.querySelector(`option[value="${semester}"]`)) {
-                        semesterSelect.querySelector(`option[value="${semester}"]`).selected = true;
-                    } else {
-                        semesterSelect.appendChild(option);
-                    }
+                    semesterSelect.appendChild(option);
                 });
+            }
+        }
+        
+        // Initialize: If programme is already selected on page load, populate years
+        if (programmeSelect && programmeSelect.value) {
+            populateYears(programmeSelect.value);
+            
+            // If year is also selected, populate semesters
+            if (yearSelect && yearSelect.value) {
+                populateSemesters(programmeSelect.value, yearSelect.value);
             }
         }
         
@@ -954,20 +970,11 @@ foreach ($programmeYearSemester as $row) {
         if (programmeSelect) {
             programmeSelect.addEventListener('change', function() {
                 const selectedProgramme = this.value;
+                populateYears(selectedProgramme);
                 
-                // Clear year and semester
-                yearSelect.innerHTML = '<option value="">All Years</option>';
-                semesterSelect.innerHTML = '<option value="">All Semesters</option>';
-                
-                if (selectedProgramme && filterData[selectedProgramme]) {
-                    // Get years for selected programme
-                    const years = Object.keys(filterData[selectedProgramme]).sort();
-                    years.forEach(year => {
-                        const option = document.createElement('option');
-                        option.value = year;
-                        option.textContent = year;
-                        yearSelect.appendChild(option);
-                    });
+                // Clear semester when programme changes
+                if (semesterSelect) {
+                    semesterSelect.innerHTML = '<option value="">All Semesters</option>';
                 }
             });
         }
@@ -977,20 +984,7 @@ foreach ($programmeYearSemester as $row) {
             yearSelect.addEventListener('change', function() {
                 const selectedProgramme = programmeSelect ? programmeSelect.value : '';
                 const selectedYear = this.value;
-                
-                // Clear semester
-                semesterSelect.innerHTML = '<option value="">All Semesters</option>';
-                
-                if (selectedProgramme && selectedYear && filterData[selectedProgramme] && filterData[selectedProgramme][selectedYear]) {
-                    // Get semesters for selected programme and year
-                    const semesters = filterData[selectedProgramme][selectedYear].sort();
-                    semesters.forEach(semester => {
-                        const option = document.createElement('option');
-                        option.value = semester;
-                        option.textContent = semester;
-                        semesterSelect.appendChild(option);
-                    });
-                }
+                populateSemesters(selectedProgramme, selectedYear);
             });
         }
         
