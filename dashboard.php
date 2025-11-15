@@ -421,6 +421,14 @@ $stats = [
                             <div class="stat-mini-label">Sessions</div>
                             <div class="stat-mini-value"><?= $stats['sessions'] ?></div>
                         </div>
+                        <div class="stat-mini">
+                            <div class="stat-mini-label">Lecturers</div>
+                            <div class="stat-mini-value"><?= $stats['lecturers'] ?></div>
+                        </div>
+                        <div class="stat-mini">
+                            <div class="stat-mini-label">Venues</div>
+                            <div class="stat-mini-value"><?= $stats['venues'] ?></div>
+                        </div>
                     </div>
                 </div>
                 <div class="status-row">
