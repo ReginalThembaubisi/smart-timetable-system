@@ -81,7 +81,12 @@ $stmt->execute($params);
 $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get unique values for filters
-$programmes = $pdo->query("SELECT DISTINCT programme FROM sessions WHERE programme IS NOT NULL AND programme != '' ORDER BY programme")->fetchAll(PDO::FETCH_COLUMN);
+// Check if any sessions have programme data
+$hasProgrammeData = $pdo->query("SELECT COUNT(*) FROM sessions WHERE programme IS NOT NULL AND programme != ''")->fetchColumn();
+$programmes = [];
+if ($hasProgrammeData > 0) {
+    $programmes = $pdo->query("SELECT DISTINCT programme FROM sessions WHERE programme IS NOT NULL AND programme != '' ORDER BY programme")->fetchAll(PDO::FETCH_COLUMN);
+}
 $days = $pdo->query("SELECT DISTINCT day_of_week FROM sessions ORDER BY day_of_week")->fetchAll(PDO::FETCH_COLUMN);
 
 // Get all programme-year-semester combinations for dynamic filtering

@@ -172,6 +172,21 @@ function parseTimetableFilePreview($content) {
 }
 
 function saveParsedData($previewData, $pdo) {
+    // Ensure programme, year_level, and semester columns exist
+    try {
+        $columns = $pdo->query("SHOW COLUMNS FROM sessions LIKE 'programme'")->fetch();
+        if (!$columns) {
+            $pdo->exec("ALTER TABLE sessions ADD COLUMN programme VARCHAR(255) NULL AFTER session_id");
+            $pdo->exec("ALTER TABLE sessions ADD COLUMN year_level VARCHAR(50) NULL AFTER programme");
+            $pdo->exec("ALTER TABLE sessions ADD COLUMN semester VARCHAR(50) NULL AFTER year_level");
+            $pdo->exec("ALTER TABLE sessions ADD INDEX idx_programme (programme)");
+            $pdo->exec("ALTER TABLE sessions ADD INDEX idx_year_level (year_level)");
+            $pdo->exec("ALTER TABLE sessions ADD INDEX idx_semester (semester)");
+        }
+    } catch (PDOException $e) {
+        // Columns might already exist, ignore error
+    }
+    
     // Save the parsed data to database
     $modulesCreated = [];
     $lecturersCreated = [];
