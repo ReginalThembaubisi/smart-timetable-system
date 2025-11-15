@@ -467,7 +467,7 @@ $stats = [
                     <a href="timetable_editor.php" class="action-card">
                         <span class="action-card-icon">✏️</span>
                         <h4>Edit Timetable</h4>
-                        <p>Edit uploaded sessions</p>
+                        <p>Inline edit sessions with filters</p>
                     </a>
                     <a href="admin/lecturers.php" class="action-card">
                         <span class="action-card-icon">👥</span>
@@ -513,7 +513,7 @@ $stats = [
                     <div class="progress-fill"></div>
                 </div>
                 <div class="progress-text">
-                    Upload a PDF or TXT export and our universal parser will populate every session.
+                    Upload a PDF or TXT export and our universal parser will populate every session. Then use the <strong>Edit Timetable</strong> page to make inline edits to lecturers, venues, days, and times with real-time updates.
                 </div>
             </div>
         </div>
