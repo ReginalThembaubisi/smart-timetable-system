@@ -1033,6 +1033,188 @@ foreach ($programmeYearSemester as $row) {
                 this.appendChild(input);
             });
         });
+        
+        // Inline editing functionality
+        const daysOfWeek = <?= json_encode($daysOfWeek) ?>;
+        const lecturersList = <?= json_encode(array_column($lecturers, 'lecturer_name', 'lecturer_id')) ?>;
+        const venuesList = <?= json_encode(array_column($venues, 'venue_name', 'venue_id')) ?>;
+        
+        document.querySelectorAll('.editable-field').forEach(field => {
+            field.addEventListener('click', function() {
+                const fieldType = this.dataset.field;
+                const sessionId = this.dataset.sessionId;
+                const currentValue = this.dataset.currentValue;
+                const originalHTML = this.innerHTML;
+                
+                // Create input based on field type
+                let input;
+                if (fieldType === 'lecturer') {
+                    input = document.createElement('select');
+                    input.style.cssText = 'padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid #667eea; border-radius: 4px; color: #fff; width: 100%;';
+                    input.innerHTML = '<option value="">-</option>';
+                    Object.entries(lecturersList).forEach(([id, name]) => {
+                        const option = document.createElement('option');
+                        option.value = id;
+                        option.textContent = name;
+                        if (name === currentValue || currentValue === '-') {
+                            option.selected = true;
+                        }
+                        input.appendChild(option);
+                    });
+                    // Add option to type new lecturer
+                    const newOption = document.createElement('option');
+                    newOption.value = '__NEW__';
+                    newOption.textContent = '+ Add New Lecturer';
+                    input.appendChild(newOption);
+                } else if (fieldType === 'venue') {
+                    input = document.createElement('select');
+                    input.style.cssText = 'padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid #667eea; border-radius: 4px; color: #fff; width: 100%;';
+                    input.innerHTML = '<option value="">-</option>';
+                    Object.entries(venuesList).forEach(([id, name]) => {
+                        const option = document.createElement('option');
+                        option.value = id;
+                        option.textContent = name;
+                        if (name === currentValue || currentValue === '-') {
+                            option.selected = true;
+                        }
+                        input.appendChild(option);
+                    });
+                    // Add option to type new venue
+                    const newOption = document.createElement('option');
+                    newOption.value = '__NEW__';
+                    newOption.textContent = '+ Add New Venue';
+                    input.appendChild(newOption);
+                } else if (fieldType === 'day') {
+                    input = document.createElement('select');
+                    input.style.cssText = 'padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid #667eea; border-radius: 4px; color: #fff; width: 100%;';
+                    daysOfWeek.forEach(day => {
+                        const option = document.createElement('option');
+                        option.value = day;
+                        option.textContent = day;
+                        if (day === currentValue) option.selected = true;
+                        input.appendChild(option);
+                    });
+                } else if (fieldType === 'start_time' || fieldType === 'end_time') {
+                    input = document.createElement('input');
+                    input.type = 'time';
+                    input.value = currentValue;
+                    input.style.cssText = 'padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid #667eea; border-radius: 4px; color: #fff; width: 100%;';
+                }
+                
+                // Replace span with input
+                this.innerHTML = '';
+                this.appendChild(input);
+                input.focus();
+                
+                // Handle save on blur or Enter
+                const saveField = () => {
+                    let value = input.value;
+                    let lecturerId = this.dataset.lecturerId || '';
+                    let venueId = this.dataset.venueId || '';
+                    let lecturerName = '';
+                    let venueName = '';
+                    
+                    if (fieldType === 'lecturer') {
+                        if (value === '__NEW__') {
+                            lecturerName = prompt('Enter new lecturer name:');
+                            if (!lecturerName) {
+                                this.innerHTML = originalHTML;
+                                return;
+                            }
+                            lecturerId = '';
+                        } else if (value) {
+                            lecturerId = value;
+                        } else {
+                            lecturerId = '';
+                        }
+                    } else if (fieldType === 'venue') {
+                        if (value === '__NEW__') {
+                            venueName = prompt('Enter new venue name:');
+                            if (!venueName) {
+                                this.innerHTML = originalHTML;
+                                return;
+                            }
+                            venueId = '';
+                        } else if (value) {
+                            venueId = value;
+                        } else {
+                            venueId = '';
+                        }
+                    }
+                    
+                    // Save via AJAX
+                    const formData = new FormData();
+                    formData.append('update_session_inline', '1');
+                    formData.append('session_id', sessionId);
+                    if (fieldType === 'lecturer') {
+                        if (lecturerId) formData.append('lecturer_id', lecturerId);
+                        if (lecturerName) formData.append('lecturer_name', lecturerName);
+                    } else if (fieldType === 'venue') {
+                        if (venueId) formData.append('venue_id', venueId);
+                        if (venueName) formData.append('venue_name', venueName);
+                    } else if (fieldType === 'day') {
+                        formData.append('day_of_week', value);
+                    } else if (fieldType === 'start_time') {
+                        formData.append('start_time', value + ':00');
+                    } else if (fieldType === 'end_time') {
+                        formData.append('end_time', value + ':00');
+                    }
+                    
+                    fetch('timetable_editor.php', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Update display value
+                            let displayValue = value;
+                            if (fieldType === 'lecturer' && lecturerName) {
+                                displayValue = lecturerName;
+                            } else if (fieldType === 'lecturer' && lecturerId && lecturersList[lecturerId]) {
+                                displayValue = lecturersList[lecturerId];
+                            } else if (fieldType === 'lecturer' && !lecturerId) {
+                                displayValue = '-';
+                            } else if (fieldType === 'venue' && venueName) {
+                                displayValue = venueName;
+                            } else if (fieldType === 'venue' && venueId && venuesList[venueId]) {
+                                displayValue = venuesList[venueId];
+                            } else if (fieldType === 'venue' && !venueId) {
+                                displayValue = '-';
+                            } else if (fieldType === 'start_time' || fieldType === 'end_time') {
+                                displayValue = value;
+                            }
+                            
+                            this.dataset.currentValue = displayValue;
+                            if (lecturerId) this.dataset.lecturerId = lecturerId;
+                            if (venueId) this.dataset.venueId = venueId;
+                            this.innerHTML = displayValue;
+                            
+                            // Reload page to refresh data
+                            setTimeout(() => window.location.reload(), 300);
+                        } else {
+                            this.innerHTML = originalHTML;
+                            alert('Error updating field');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        this.innerHTML = originalHTML;
+                        alert('Error updating field');
+                    });
+                };
+                
+                input.addEventListener('blur', saveField);
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveField();
+                    } else if (e.key === 'Escape') {
+                        this.innerHTML = originalHTML;
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>
