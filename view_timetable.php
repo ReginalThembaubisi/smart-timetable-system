@@ -517,13 +517,17 @@ $totalSessions = count($sessions);
             <form method="GET" class="filters">
                 <div class="filter-group">
                     <label>Programme</label>
-                    <select name="programme">
+                    <select name="programme" id="programmeSelect">
                         <option value="">All Programmes</option>
-                        <?php foreach ($programmes as $programme): ?>
-                            <option value="<?= htmlspecialchars($programme) ?>" <?= $programmeFilter === $programme ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($programme) ?>
-                            </option>
-                        <?php endforeach; ?>
+                        <?php if (empty($programmes)): ?>
+                            <option value="" disabled>No programmes found - Please upload timetable file</option>
+                        <?php else: ?>
+                            <?php foreach ($programmes as $programme): ?>
+                                <option value="<?= htmlspecialchars($programme) ?>" <?= $programmeFilter === $programme ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($programme) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                     </select>
                 </div>
                 
@@ -692,7 +696,7 @@ $totalSessions = count($sessions);
         
         console.log('Filter Data:', filterData); // Debug
         
-        const programmeSelect = document.querySelector('select[name="programme"]');
+        const programmeSelect = document.getElementById('programmeSelect');
         const yearSelect = document.getElementById('yearFilter');
         const semesterSelect = document.getElementById('semesterFilter');
         
