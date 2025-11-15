@@ -516,6 +516,11 @@ $totalSessions = count($sessions);
             <div class="page-header">
                 <h1>View Timetable</h1>
                 <p>Browse all timetable sessions organized by day</p>
+                <?php if (empty($programmes) && $totalSessions > 0): ?>
+                    <div style="margin-top: 16px; padding: 12px 16px; background: rgba(255, 193, 7, 0.2); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 8px; color: #ffc107; font-size: 13px;">
+                        ⚠️ <strong>Notice:</strong> Your sessions don't have programme/year/semester data. Please go to <strong>Semester Management</strong> to clear data, then <strong>Upload Timetable</strong> again to save programme information.
+                    </div>
+                <?php endif; ?>
             </div>
             
             <!-- Filters -->
@@ -525,7 +530,7 @@ $totalSessions = count($sessions);
                     <select name="programme" id="programmeSelect">
                         <option value="">All Programmes</option>
                         <?php if (empty($programmes)): ?>
-                            <option value="" disabled>No programmes found - Please upload timetable file</option>
+                            <option value="" disabled>⚠️ No programmes found - Sessions need to be re-uploaded</option>
                         <?php else: ?>
                             <?php foreach ($programmes as $programme): ?>
                                 <option value="<?= htmlspecialchars($programme) ?>" <?= $programmeFilter === $programme ? 'selected' : '' ?>>
