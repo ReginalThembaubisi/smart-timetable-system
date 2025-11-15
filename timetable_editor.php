@@ -210,6 +210,9 @@ $lecturers = $pdo->query("SELECT * FROM lecturers ORDER BY lecturer_name")->fetc
 $venues = $pdo->query("SELECT * FROM venues ORDER BY venue_name")->fetchAll(PDO::FETCH_ASSOC);
 $modules = $pdo->query("SELECT * FROM modules ORDER BY module_code")->fetchAll(PDO::FETCH_ASSOC);
 
+// Define days of week for inline editing
+$daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
 // Get programme/year/semester data for filters
 $programmes = $pdo->query("SELECT DISTINCT programme FROM sessions WHERE programme IS NOT NULL AND programme != '' ORDER BY programme")->fetchAll(PDO::FETCH_COLUMN);
 $programmeYearSemester = $pdo->query("
@@ -961,7 +964,17 @@ foreach ($programmeYearSemester as $row) {
         document.addEventListener('DOMContentLoaded', function() {
         
         // Filter data from PHP
-        const filterData = <?= json_encode($filterData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        <?php
+        try {
+            $filterDataJson = json_encode($filterData ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+            if ($filterDataJson === false) {
+                $filterDataJson = '{}';
+            }
+        } catch (Exception $e) {
+            $filterDataJson = '{}';
+        }
+        ?>
+        const filterData = <?= $filterDataJson ?>;
         
         const programmeSelect = document.getElementById('programmeFilter');
         const yearSelect = document.getElementById('yearFilter');
@@ -1069,9 +1082,9 @@ foreach ($programmeYearSemester as $row) {
         });
         
         // Inline editing functionality
-        const daysOfWeek = <?= json_encode($daysOfWeek) ?>;
-        const lecturersList = <?= json_encode(array_column($lecturers, 'lecturer_name', 'lecturer_id')) ?>;
-        const venuesList = <?= json_encode(array_column($venues, 'venue_name', 'venue_id')) ?>;
+        const daysOfWeek = <?= json_encode($daysOfWeek ?? ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        const lecturersList = <?= json_encode(array_column($lecturers ?? [], 'lecturer_name', 'lecturer_id'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        const venuesList = <?= json_encode(array_column($venues ?? [], 'venue_name', 'venue_id'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         
         // Make sure editable fields are clickable
         const editableFields = document.querySelectorAll('.editable-field');
