@@ -96,12 +96,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_session_inline
         }
     }
     
-    $stmt = $pdo->prepare("UPDATE sessions SET lecturer_id = ?, venue_id = ?, day_of_week = ?, start_time = ?, end_time = ? WHERE session_id = ?");
-    $stmt->execute([$lecturerId, $venueId, $dayOfWeek, $startTime, $endTime, $sessionId]);
-    
-    header('Content-Type: application/json');
-    echo json_encode(['success' => true]);
-    exit;
+    try {
+        $stmt = $pdo->prepare("UPDATE sessions SET lecturer_id = ?, venue_id = ?, day_of_week = ?, start_time = ?, end_time = ? WHERE session_id = ?");
+        $stmt->execute([$lecturerId, $venueId, $dayOfWeek, $startTime, $endTime, $sessionId]);
+        
+        header('Content-Type: application/json');
+        echo json_encode(['success' => true, 'message' => 'Session updated successfully']);
+        exit;
+    } catch (PDOException $e) {
+        header('Content-Type: application/json');
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        exit;
+    }
 }
 
 // Ensure programme, year_level, and semester columns exist
@@ -1164,34 +1171,16 @@ foreach ($programmeYearSemester as $row) {
                         method: 'POST',
                         body: formData
                     })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
                     .then(data => {
                         if (data.success) {
-                            // Update display value
-                            let displayValue = value;
-                            if (fieldType === 'lecturer' && lecturerName) {
-                                displayValue = lecturerName;
-                            } else if (fieldType === 'lecturer' && lecturerId && lecturersList[lecturerId]) {
-                                displayValue = lecturersList[lecturerId];
-                            } else if (fieldType === 'lecturer' && !lecturerId) {
-                                displayValue = '-';
-                            } else if (fieldType === 'venue' && venueName) {
-                                displayValue = venueName;
-                            } else if (fieldType === 'venue' && venueId && venuesList[venueId]) {
-                                displayValue = venuesList[venueId];
-                            } else if (fieldType === 'venue' && !venueId) {
-                                displayValue = '-';
-                            } else if (fieldType === 'start_time' || fieldType === 'end_time') {
-                                displayValue = value;
-                            }
-                            
-                            this.dataset.currentValue = displayValue;
-                            if (lecturerId) this.dataset.lecturerId = lecturerId;
-                            if (venueId) this.dataset.venueId = venueId;
-                            this.innerHTML = displayValue;
-                            
-                            // Reload page to refresh data
-                            setTimeout(() => window.location.reload(), 300);
+                            // Immediately reload page to show updated data
+                            window.location.reload();
                         } else {
                             this.innerHTML = originalHTML;
                             alert('Error updating field');
@@ -1200,7 +1189,7 @@ foreach ($programmeYearSemester as $row) {
                     .catch(error => {
                         console.error('Error:', error);
                         this.innerHTML = originalHTML;
-                        alert('Error updating field');
+                        alert('Error updating field: ' + error.message);
                     });
                 };
                 
