@@ -1113,9 +1113,12 @@ foreach ($programmeYearSemester as $row) {
                     input.style.cssText = 'padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid #667eea; border-radius: 4px; color: #fff; width: 100%;';
                 }
                 
+                // Store reference to field for escape handler
+                const fieldElement = this;
+                
                 // Replace span with input
-                this.innerHTML = '';
-                this.appendChild(input);
+                fieldElement.innerHTML = '';
+                fieldElement.appendChild(input);
                 
                 // Prevent immediate blur when clicking on select/input
                 let isSaving = false;
@@ -1133,8 +1136,8 @@ foreach ($programmeYearSemester as $row) {
                     if (isSaving) return;
                     isSaving = true;
                     let value = input.value;
-                    let lecturerId = this.dataset.lecturerId || '';
-                    let venueId = this.dataset.venueId || '';
+                    let lecturerId = fieldElement.dataset.lecturerId || '';
+                    let venueId = fieldElement.dataset.venueId || '';
                     let lecturerName = '';
                     let venueName = '';
                     
@@ -1142,7 +1145,8 @@ foreach ($programmeYearSemester as $row) {
                         if (value === '__NEW__') {
                             lecturerName = prompt('Enter new lecturer name:');
                             if (!lecturerName) {
-                                this.innerHTML = originalHTML;
+                                isSaving = false;
+                                fieldElement.innerHTML = originalHTML;
                                 return;
                             }
                             lecturerId = '';
@@ -1155,7 +1159,8 @@ foreach ($programmeYearSemester as $row) {
                         if (value === '__NEW__') {
                             venueName = prompt('Enter new venue name:');
                             if (!venueName) {
-                                this.innerHTML = originalHTML;
+                                isSaving = false;
+                                fieldElement.innerHTML = originalHTML;
                                 return;
                             }
                             venueId = '';
@@ -1201,19 +1206,18 @@ foreach ($programmeYearSemester as $row) {
                             const urlParams = new URLSearchParams(window.location.search);
                             window.location.href = 'timetable_editor.php' + (urlParams.toString() ? '?' + urlParams.toString() : '');
                         } else {
-                            this.innerHTML = originalHTML;
+                            isSaving = false;
+                            fieldElement.innerHTML = originalHTML;
                             alert('Error updating field: ' + (data.error || 'Unknown error'));
                         }
                     })
                     .catch(error => {
                         console.error('Error:', error);
-                        this.innerHTML = originalHTML;
+                        isSaving = false;
+                        fieldElement.innerHTML = originalHTML;
                         alert('Error updating field: ' + error.message);
                     });
                 };
-                
-                // Store reference to field for escape handler
-                const fieldElement = this;
                 
                 // For select elements, don't auto-save - require explicit save
                 if (input.tagName === 'SELECT') {
