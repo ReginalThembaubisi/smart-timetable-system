@@ -82,9 +82,35 @@ $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get unique values for filters
 $programmes = $pdo->query("SELECT DISTINCT programme FROM sessions WHERE programme IS NOT NULL AND programme != '' ORDER BY programme")->fetchAll(PDO::FETCH_COLUMN);
-$years = $pdo->query("SELECT DISTINCT year_level FROM sessions WHERE year_level IS NOT NULL AND year_level != '' ORDER BY year_level")->fetchAll(PDO::FETCH_COLUMN);
-$semesters = $pdo->query("SELECT DISTINCT semester FROM sessions WHERE semester IS NOT NULL AND semester != '' ORDER BY semester")->fetchAll(PDO::FETCH_COLUMN);
 $days = $pdo->query("SELECT DISTINCT day_of_week FROM sessions ORDER BY day_of_week")->fetchAll(PDO::FETCH_COLUMN);
+
+// Get all programme-year-semester combinations for dynamic filtering
+$programmeYearSemester = $pdo->query("
+    SELECT DISTINCT programme, year_level, semester 
+    FROM sessions 
+    WHERE programme IS NOT NULL AND programme != '' 
+    AND year_level IS NOT NULL AND year_level != ''
+    AND semester IS NOT NULL AND semester != ''
+    ORDER BY programme, year_level, semester
+")->fetchAll(PDO::FETCH_ASSOC);
+
+// Build data structure for JavaScript
+$filterData = [];
+foreach ($programmeYearSemester as $row) {
+    $prog = $row['programme'];
+    $year = $row['year_level'];
+    $sem = $row['semester'];
+    
+    if (!isset($filterData[$prog])) {
+        $filterData[$prog] = [];
+    }
+    if (!isset($filterData[$prog][$year])) {
+        $filterData[$prog][$year] = [];
+    }
+    if (!in_array($sem, $filterData[$prog][$year])) {
+        $filterData[$prog][$year][] = $sem;
+    }
+}
 
 // Group sessions by day
 $sessionsByDay = [];
@@ -494,25 +520,39 @@ $totalSessions = count($sessions);
                 
                 <div class="filter-group">
                     <label>Year Level</label>
-                    <select name="year">
+                    <select name="year" id="yearFilter">
                         <option value="">All Years</option>
-                        <?php foreach ($years as $year): ?>
-                            <option value="<?= htmlspecialchars($year) ?>" <?= $yearFilter === $year ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($year) ?>
-                            </option>
-                        <?php endforeach; ?>
+                        <?php 
+                        // Show years for selected programme if one is selected
+                        if ($programmeFilter && isset($filterData[$programmeFilter])) {
+                            $yearsForProgramme = array_keys($filterData[$programmeFilter]);
+                            sort($yearsForProgramme);
+                            foreach ($yearsForProgramme as $year): ?>
+                                <option value="<?= htmlspecialchars($year) ?>" <?= $yearFilter === $year ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($year) ?>
+                                </option>
+                            <?php endforeach;
+                        }
+                        ?>
                     </select>
                 </div>
                 
                 <div class="filter-group">
                     <label>Semester</label>
-                    <select name="semester">
+                    <select name="semester" id="semesterFilter">
                         <option value="">All Semesters</option>
-                        <?php foreach ($semesters as $semester): ?>
-                            <option value="<?= htmlspecialchars($semester) ?>" <?= $semesterFilter === $semester ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($semester) ?>
-                            </option>
-                        <?php endforeach; ?>
+                        <?php 
+                        // Show semesters for selected programme and year if both are selected
+                        if ($programmeFilter && $yearFilter && isset($filterData[$programmeFilter][$yearFilter])) {
+                            $semestersForProgrammeYear = $filterData[$programmeFilter][$yearFilter];
+                            sort($semestersForProgrammeYear);
+                            foreach ($semestersForProgrammeYear as $semester): ?>
+                                <option value="<?= htmlspecialchars($semester) ?>" <?= $semesterFilter === $semester ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($semester) ?>
+                                </option>
+                            <?php endforeach;
+                        }
+                        ?>
                     </select>
                 </div>
                 
