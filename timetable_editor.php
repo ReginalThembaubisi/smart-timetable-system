@@ -907,14 +907,58 @@ foreach ($programmeYearSemester as $row) {
     </div>
     
     <script>
-        // Wait for DOM to be fully loaded
-        document.addEventListener('DOMContentLoaded', function() {
-        
+        // Functions that need to be globally accessible (called from inline handlers)
         function toggleSelectAll() {
             const selectAll = document.getElementById('selectAll');
             const checkboxes = document.querySelectorAll('.session-checkbox');
             checkboxes.forEach(cb => cb.checked = selectAll.checked);
         }
+        
+        function openBulkLecturerModal() {
+            const selectedIds = Array.from(document.querySelectorAll('.session-checkbox:checked')).map(cb => cb.value);
+            if (selectedIds.length === 0) {
+                alert('Please select at least one session');
+                return;
+            }
+            document.getElementById('bulkSessionIds').value = JSON.stringify(selectedIds);
+            document.getElementById('bulkLecturerModal').classList.add('active');
+        }
+        
+        function closeBulkLecturerModal() {
+            document.getElementById('bulkLecturerModal').classList.remove('active');
+        }
+        
+        function openBulkVenueModal() {
+            const selectedIds = Array.from(document.querySelectorAll('.session-checkbox:checked')).map(cb => cb.value);
+            if (selectedIds.length === 0) {
+                alert('Please select at least one session');
+                return;
+            }
+            document.getElementById('bulkVenueSessionIds').value = JSON.stringify(selectedIds);
+            document.getElementById('bulkVenueModal').classList.add('active');
+        }
+        
+        function closeBulkVenueModal() {
+            document.getElementById('bulkVenueModal').classList.remove('active');
+        }
+        
+        function applyFilters() {
+            const programme = document.getElementById('programmeFilter').value;
+            const year = document.getElementById('yearFilter').value;
+            const semester = document.getElementById('semesterFilter').value;
+            const search = document.getElementById('searchFilter').value;
+            
+            const params = new URLSearchParams();
+            if (programme) params.append('programme', programme);
+            if (year) params.append('year', year);
+            if (semester) params.append('semester', semester);
+            if (search) params.append('search', search);
+            
+            window.location.href = 'timetable_editor.php' + (params.toString() ? '?' + params.toString() : '');
+        }
+        
+        // Wait for DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
         
         // Filter data from PHP
         const filterData = <?= json_encode($filterData) ?>;
@@ -989,59 +1033,6 @@ foreach ($programmeYearSemester as $row) {
                 const selectedYear = this.value;
                 populateSemesters(selectedProgramme, selectedYear);
             });
-        }
-        
-        function applyFilters() {
-            const programme = document.getElementById('programmeFilter').value;
-            const year = document.getElementById('yearFilter').value;
-            const semester = document.getElementById('semesterFilter').value;
-            const search = document.getElementById('searchFilter').value;
-            
-            const params = new URLSearchParams();
-            if (programme) params.append('programme', programme);
-            if (year) params.append('year', year);
-            if (semester) params.append('semester', semester);
-            if (search) params.append('search', search);
-            
-            window.location.href = 'timetable_editor.php' + (params.toString() ? '?' + params.toString() : '');
-        }
-        
-        function openEditLecturerModal(lecturerId, lecturerName) {
-            document.getElementById('lecturerId').value = lecturerId || '';
-            document.getElementById('lecturerName').value = lecturerName || '';
-            document.getElementById('editLecturerModal').classList.add('active');
-        }
-        
-        function closeEditLecturerModal() {
-            document.getElementById('editLecturerModal').classList.remove('active');
-        }
-        
-        function openBulkLecturerModal() {
-            const checked = Array.from(document.querySelectorAll('.session-checkbox:checked')).map(cb => cb.value);
-            if (checked.length === 0) {
-                alert('Please select at least one session');
-                return;
-            }
-            document.getElementById('bulkSessionIds').value = JSON.stringify(checked);
-            document.getElementById('bulkLecturerModal').classList.add('active');
-        }
-        
-        function closeBulkLecturerModal() {
-            document.getElementById('bulkLecturerModal').classList.remove('active');
-        }
-        
-        function openBulkVenueModal() {
-            const checked = Array.from(document.querySelectorAll('.session-checkbox:checked')).map(cb => cb.value);
-            if (checked.length === 0) {
-                alert('Please select at least one session');
-                return;
-            }
-            document.getElementById('bulkVenueSessionIds').value = JSON.stringify(checked);
-            document.getElementById('bulkVenueModal').classList.add('active');
-        }
-        
-        function closeBulkVenueModal() {
-            document.getElementById('bulkVenueModal').classList.remove('active');
         }
         
         // Close modal on outside click
