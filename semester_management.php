@@ -18,8 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['clear_data'])) {
     $clearType = $_POST['clear_type'] ?? '';
     $confirmText = $_POST['confirm_text'] ?? '';
     
-    if ($confirmText !== 'DELETE') {
-        $message = 'Please type "DELETE" to confirm.';
+    if (!isset($_POST['confirm_checkbox'])) {
+        $message = 'Please check the confirmation box to proceed.';
         $messageType = 'error';
     } else {
         try {
@@ -313,21 +313,6 @@ $stats = [
             color: rgba(255,255,255,0.5);
             margin-left: 28px;
         }
-        .confirm-input {
-            width: 100%;
-            padding: 12px 16px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 8px;
-            color: #ffffff;
-            font-size: 14px;
-            margin-bottom: 16px;
-        }
-        .confirm-input:focus {
-            outline: none;
-            border-color: #667eea;
-            background: rgba(255,255,255,0.08);
-        }
         .btn-danger {
             background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
             color: white;
@@ -485,28 +470,42 @@ $stats = [
                         </div>
                     </div>
                     
-                    <input 
-                        type="text" 
-                        name="confirm_text" 
-                        class="confirm-input" 
-                        placeholder="Type 'DELETE' to confirm" 
-                        required
-                        autocomplete="off"
-                    >
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 16px; background: rgba(231, 76, 60, 0.1); border: 1px solid rgba(231, 76, 60, 0.3); border-radius: 8px;">
+                        <input 
+                            type="checkbox" 
+                            name="confirm_checkbox" 
+                            id="confirm_checkbox"
+                            required
+                            style="width: 20px; height: 20px; cursor: pointer;"
+                        >
+                        <label for="confirm_checkbox" style="cursor: pointer; font-weight: 500; color: rgba(255,255,255,0.9);">
+                            I understand this action cannot be undone
+                        </label>
+                    </div>
                     
-                    <button type="submit" name="clear_data" class="btn-danger">Clear Data</button>
+                    <button type="submit" name="clear_data" class="btn-danger" id="clearBtn" disabled>Clear Data</button>
                 </form>
             </div>
         </div>
     </div>
     
     <script>
-        function confirmClear() {
-            const confirmText = document.querySelector('input[name="confirm_text"]').value;
-            const clearType = document.querySelector('input[name="clear_type"]:checked')?.value;
+        // Enable/disable clear button based on checkbox
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkbox = document.getElementById('confirm_checkbox');
+            const clearBtn = document.getElementById('clearBtn');
             
-            if (confirmText !== 'DELETE') {
-                alert('Please type "DELETE" to confirm.');
+            checkbox.addEventListener('change', function() {
+                clearBtn.disabled = !this.checked;
+            });
+        });
+        
+        function confirmClear() {
+            const clearType = document.querySelector('input[name="clear_type"]:checked')?.value;
+            const isConfirmed = document.getElementById('confirm_checkbox').checked;
+            
+            if (!isConfirmed) {
+                alert('Please check the confirmation box to proceed.');
                 return false;
             }
             
