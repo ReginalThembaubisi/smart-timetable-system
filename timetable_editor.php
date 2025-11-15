@@ -97,8 +97,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_session_inline
     }
     
     try {
-        $stmt = $pdo->prepare("UPDATE sessions SET lecturer_id = ?, venue_id = ?, day_of_week = ?, start_time = ?, end_time = ? WHERE session_id = ?");
-        $stmt->execute([$lecturerId, $venueId, $dayOfWeek, $startTime, $endTime, $sessionId]);
+        // Build dynamic UPDATE query based on what fields are provided
+        $updates = [];
+        $params = [];
+        
+        if (isset($_POST['lecturer_id']) || isset($_POST['lecturer_name'])) {
+            $updates[] = "lecturer_id = ?";
+            $params[] = $lecturerId;
+        }
+        if (isset($_POST['venue_id']) || isset($_POST['venue_name'])) {
+            $updates[] = "venue_id = ?";
+            $params[] = $venueId;
+        }
+        if (isset($_POST['day_of_week'])) {
+            $updates[] = "day_of_week = ?";
+            $params[] = $dayOfWeek;
+        }
+        if (isset($_POST['start_time'])) {
+            $updates[] = "start_time = ?";
+            $params[] = $startTime;
+        }
+        if (isset($_POST['end_time'])) {
+            $updates[] = "end_time = ?";
+            $params[] = $endTime;
+        }
+        
+        if (empty($updates)) {
+            header('Content-Type: application/json');
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'No fields to update']);
+            exit;
+        }
+        
+        $params[] = $sessionId;
+        $sql = "UPDATE sessions SET " . implode(', ', $updates) . " WHERE session_id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
         
         header('Content-Type: application/json');
         echo json_encode(['success' => true, 'message' => 'Session updated successfully']);
