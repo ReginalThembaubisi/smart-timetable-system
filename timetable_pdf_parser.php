@@ -126,6 +126,7 @@ function parseTimetableFilePreview($content) {
             } elseif (preg_match('/Module:\s*(.+)/i', $line, $matches)) {
                 $moduleCode = trim($matches[1]);
                 if (!empty($moduleCode)) {
+                    // Keep multiple modules together as single module name
                     $currentSession['module'] = $moduleCode;
                 }
             } elseif (preg_match('/Staff:\s*(.+)/i', $line, $matches)) {
@@ -186,7 +187,13 @@ function saveParsedData($previewData, $pdo) {
         }
         
         // Get or create module
-        $moduleCode = $session['module'];
+        $moduleCode = trim($session['module']);
+        
+        if (empty($moduleCode)) {
+            $skippedCount++;
+            continue;
+        }
+        
         $moduleId = null;
         
         if (!isset($modulesCreated[$moduleCode])) {
@@ -197,14 +204,41 @@ function saveParsedData($previewData, $pdo) {
             if ($existing) {
                 $moduleId = $existing['module_id'];
             } else {
-                // Create module
-                $stmt = $pdo->prepare("INSERT INTO modules (module_code, module_name, credits) VALUES (?, ?, ?)");
-                $stmt->execute([$moduleCode, $moduleCode, 0]);
-                $moduleId = $pdo->lastInsertId();
+                // Create module - handle duplicate key errors
+                try {
+                    $stmt = $pdo->prepare("INSERT INTO modules (module_code, module_name, credits) VALUES (?, ?, ?)");
+                    $stmt->execute([$moduleCode, $moduleCode, 0]);
+                    $moduleId = $pdo->lastInsertId();
+                } catch (PDOException $e) {
+                    // If duplicate, try to fetch it
+                    if ($e->getCode() == 23000 || $e->getCode() == '23000') {
+                        $stmt = $pdo->prepare("SELECT module_id FROM modules WHERE module_code = ?");
+                        $stmt->execute([$moduleCode]);
+                        $existing = $stmt->fetch();
+                        if ($existing) {
+                            $moduleId = $existing['module_id'];
+                        } else {
+                            // Skip this session if we can't create or find module
+                            $skippedCount++;
+                            continue;
+                        }
+                    } else {
+                        // Skip this session on other errors
+                        $skippedCount++;
+                        continue;
+                    }
+                }
             }
-            $modulesCreated[$moduleCode] = $moduleId;
+            if ($moduleId) {
+                $modulesCreated[$moduleCode] = $moduleId;
+            }
         } else {
             $moduleId = $modulesCreated[$moduleCode];
+        }
+        
+        if (!$moduleId) {
+            $skippedCount++;
+            continue;
         }
         
         // Get or create lecturer
