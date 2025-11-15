@@ -186,7 +186,7 @@ function saveParsedData($previewData, $pdo) {
             continue;
         }
         
-        // Get or create module
+        // Get or create module - stores in modules table
         $moduleCode = trim($session['module']);
         
         if (empty($moduleCode)) {
@@ -197,6 +197,7 @@ function saveParsedData($previewData, $pdo) {
         $moduleId = null;
         
         if (!isset($modulesCreated[$moduleCode])) {
+            // Check if module exists in modules table
             $stmt = $pdo->prepare("SELECT module_id FROM modules WHERE module_code = ?");
             $stmt->execute([$moduleCode]);
             $existing = $stmt->fetch();
@@ -204,7 +205,7 @@ function saveParsedData($previewData, $pdo) {
             if ($existing) {
                 $moduleId = $existing['module_id'];
             } else {
-                // Create module - handle duplicate key errors
+                // Create new module in modules table
                 try {
                     $stmt = $pdo->prepare("INSERT INTO modules (module_code, module_name, credits) VALUES (?, ?, ?)");
                     $stmt->execute([$moduleCode, $moduleCode, 0]);
