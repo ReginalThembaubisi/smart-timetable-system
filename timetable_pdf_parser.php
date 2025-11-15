@@ -242,12 +242,13 @@ function saveParsedData($previewData, $pdo) {
             continue;
         }
         
-        // Get or create lecturer
-        $lecturerName = $session['staff'] ?? '';
+        // Get or create lecturer - stores in lecturers table
+        $lecturerName = trim($session['staff'] ?? '');
         $lecturerId = null;
         
         if (!empty($lecturerName)) {
             if (!isset($lecturersCreated[$lecturerName])) {
+                // Check if lecturer exists in lecturers table
                 $stmt = $pdo->prepare("SELECT lecturer_id FROM lecturers WHERE lecturer_name = ?");
                 $stmt->execute([$lecturerName]);
                 $existing = $stmt->fetch();
@@ -255,6 +256,7 @@ function saveParsedData($previewData, $pdo) {
                 if ($existing) {
                     $lecturerId = $existing['lecturer_id'];
                 } else {
+                    // Create new lecturer in lecturers table
                     $stmt = $pdo->prepare("INSERT INTO lecturers (lecturer_name, email) VALUES (?, ?)");
                     $stmt->execute([$lecturerName, '']);
                     $lecturerId = $pdo->lastInsertId();
@@ -265,12 +267,13 @@ function saveParsedData($previewData, $pdo) {
             }
         }
         
-        // Get or create venue
-        $venueName = $session['room_name'] ?? $session['room_code'] ?? '';
+        // Get or create venue - stores in venues table
+        $venueName = trim($session['room_name'] ?? $session['room_code'] ?? '');
         $venueId = null;
         
         if (!empty($venueName)) {
             if (!isset($venuesCreated[$venueName])) {
+                // Check if venue exists in venues table
                 $stmt = $pdo->prepare("SELECT venue_id FROM venues WHERE venue_name = ?");
                 $stmt->execute([$venueName]);
                 $existing = $stmt->fetch();
@@ -278,6 +281,7 @@ function saveParsedData($previewData, $pdo) {
                 if ($existing) {
                     $venueId = $existing['venue_id'];
                 } else {
+                    // Create new venue in venues table
                     $stmt = $pdo->prepare("INSERT INTO venues (venue_name, capacity) VALUES (?, ?)");
                     $stmt->execute([$venueName, 0]);
                     $venueId = $pdo->lastInsertId();
@@ -288,18 +292,21 @@ function saveParsedData($previewData, $pdo) {
             }
         }
         
-        // Check if session already exists
+        // Check if session already exists in sessions table
         $stmt = $pdo->prepare("SELECT session_id FROM sessions WHERE module_id = ? AND day_of_week = ? AND start_time = ?");
         $stmt->execute([$moduleId, $session['day'], $session['start_time']]);
         $existing = $stmt->fetch();
         
         if (!$existing) {
-            // Insert session
+            // Insert session into sessions table with proper foreign keys
+            // module_id → links to modules table
+            // lecturer_id → links to lecturers table (can be NULL)
+            // venue_id → links to venues table (can be NULL)
             $stmt = $pdo->prepare("INSERT INTO sessions (module_id, lecturer_id, venue_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $moduleId,
-                $lecturerId,
-                $venueId,
+                $lecturerId,  // Can be NULL if no lecturer
+                $venueId,     // Can be NULL if no venue
                 $session['day'],
                 $session['start_time'],
                 $session['end_time']
