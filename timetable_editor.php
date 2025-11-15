@@ -622,9 +622,14 @@ foreach ($programmeYearSemester as $row) {
                     <span>Back to Dashboard</span>
                 </a>
             </div>
-            <div class="page-header">
-                <h1>Timetable Editor</h1>
-                <p>Edit, update, and manage timetable sessions with bulk operations</p>
+            <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <h1>Timetable Editor</h1>
+                    <p>Edit, update, and manage timetable sessions with bulk operations</p>
+                </div>
+                <button onclick="window.location.reload()" style="padding: 10px 20px; background: rgba(102, 126, 234, 0.2); border: 1px solid rgba(102, 126, 234, 0.5); border-radius: 8px; color: #667eea; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s;" onmouseover="this.style.background='rgba(102, 126, 234, 0.3)'" onmouseout="this.style.background='rgba(102, 126, 234, 0.2)'">
+                    🔄 Refresh
+                </button>
             </div>
             
             <!-- Filters -->
