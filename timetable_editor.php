@@ -688,16 +688,21 @@ foreach ($programmeYearSemester as $row) {
                     <select name="year" id="yearFilter">
                         <option value="">All Years</option>
                         <?php 
-                        if ($programmeFilter && isset($filterData[$programmeFilter])) {
-                            $yearsForProgramme = array_keys($filterData[$programmeFilter]);
-                            sort($yearsForProgramme);
-                            foreach ($yearsForProgramme as $year): ?>
-                                <option value="<?= htmlspecialchars($year) ?>" <?= $yearFilter === $year ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($year) ?>
-                                </option>
-                            <?php endforeach;
+                        // Get all unique years from all programmes
+                        $allYears = [];
+                        foreach ($filterData as $prog => $years) {
+                            foreach (array_keys($years) as $year) {
+                                if (!in_array($year, $allYears)) {
+                                    $allYears[] = $year;
+                                }
+                            }
                         }
-                        ?>
+                        sort($allYears);
+                        foreach ($allYears as $year): ?>
+                            <option value="<?= htmlspecialchars($year) ?>" <?= $yearFilter === $year ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($year) ?>
+                            </option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 
@@ -706,16 +711,23 @@ foreach ($programmeYearSemester as $row) {
                     <select name="semester" id="semesterFilter">
                         <option value="">All Semesters</option>
                         <?php 
-                        if ($programmeFilter && $yearFilter && isset($filterData[$programmeFilter][$yearFilter])) {
-                            $semestersForProgrammeYear = $filterData[$programmeFilter][$yearFilter];
-                            sort($semestersForProgrammeYear);
-                            foreach ($semestersForProgrammeYear as $semester): ?>
-                                <option value="<?= htmlspecialchars($semester) ?>" <?= $semesterFilter === $semester ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($semester) ?>
-                                </option>
-                            <?php endforeach;
+                        // Get all unique semesters
+                        $allSemesters = [];
+                        foreach ($filterData as $prog => $years) {
+                            foreach ($years as $year => $semesters) {
+                                foreach ($semesters as $semester) {
+                                    if (!in_array($semester, $allSemesters)) {
+                                        $allSemesters[] = $semester;
+                                    }
+                                }
+                            }
                         }
-                        ?>
+                        sort($allSemesters);
+                        foreach ($allSemesters as $semester): ?>
+                            <option value="<?= htmlspecialchars($semester) ?>" <?= $semesterFilter === $semester ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($semester) ?>
+                            </option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 
@@ -1026,15 +1038,51 @@ foreach ($programmeYearSemester as $row) {
             }
         }
         
-        // Update year dropdown when programme changes
+        // Update year dropdown when programme changes (optional - can filter or show all)
         if (programmeSelect) {
             programmeSelect.addEventListener('change', function() {
                 const selectedProgramme = this.value;
-                populateYears(selectedProgramme);
+                
+                // If a programme is selected, filter years to show only relevant ones
+                // Otherwise, keep all years visible
+                if (selectedProgramme && filterData[selectedProgramme]) {
+                    populateYears(selectedProgramme);
+                } else {
+                    // Show all years if no programme selected
+                    if (yearSelect) {
+                        yearSelect.innerHTML = '<option value="">All Years</option>';
+                        // Get all unique years
+                        const allYears = new Set();
+                        Object.values(filterData).forEach(years => {
+                            Object.keys(years).forEach(year => allYears.add(year));
+                        });
+                        Array.from(allYears).sort().forEach(year => {
+                            const option = document.createElement('option');
+                            option.value = year;
+                            option.textContent = year;
+                            yearSelect.appendChild(option);
+                        });
+                    }
+                }
                 
                 // Clear semester when programme changes
                 if (semesterSelect) {
                     semesterSelect.innerHTML = '<option value="">All Semesters</option>';
+                    // Show all semesters if no programme/year selected
+                    if (!selectedProgramme) {
+                        const allSemesters = new Set();
+                        Object.values(filterData).forEach(years => {
+                            Object.values(years).forEach(semesters => {
+                                semesters.forEach(sem => allSemesters.add(sem));
+                            });
+                        });
+                        Array.from(allSemesters).sort().forEach(semester => {
+                            const option = document.createElement('option');
+                            option.value = semester;
+                            option.textContent = semester;
+                            semesterSelect.appendChild(option);
+                        });
+                    }
                 }
             });
         }
@@ -1044,7 +1092,44 @@ foreach ($programmeYearSemester as $row) {
             yearSelect.addEventListener('change', function() {
                 const selectedProgramme = programmeSelect ? programmeSelect.value : '';
                 const selectedYear = this.value;
-                populateSemesters(selectedProgramme, selectedYear);
+                
+                if (selectedProgramme && selectedYear) {
+                    populateSemesters(selectedProgramme, selectedYear);
+                } else if (selectedYear) {
+                    // If year selected but no programme, show all semesters for that year
+                    if (semesterSelect) {
+                        semesterSelect.innerHTML = '<option value="">All Semesters</option>';
+                        const allSemesters = new Set();
+                        Object.values(filterData).forEach(years => {
+                            if (years[selectedYear]) {
+                                years[selectedYear].forEach(sem => allSemesters.add(sem));
+                            }
+                        });
+                        Array.from(allSemesters).sort().forEach(semester => {
+                            const option = document.createElement('option');
+                            option.value = semester;
+                            option.textContent = semester;
+                            semesterSelect.appendChild(option);
+                        });
+                    }
+                } else {
+                    // Show all semesters if no year selected
+                    if (semesterSelect) {
+                        semesterSelect.innerHTML = '<option value="">All Semesters</option>';
+                        const allSemesters = new Set();
+                        Object.values(filterData).forEach(years => {
+                            Object.values(years).forEach(semesters => {
+                                semesters.forEach(sem => allSemesters.add(sem));
+                            });
+                        });
+                        Array.from(allSemesters).sort().forEach(semester => {
+                            const option = document.createElement('option');
+                            option.value = semester;
+                            option.textContent = semester;
+                            semesterSelect.appendChild(option);
+                        });
+                    }
+                }
             });
         }
         
