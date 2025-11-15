@@ -11,6 +11,9 @@ $pdo = new PDO("mysql:host=localhost;dbname=smart_timetable", "root", "");
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
 // Get filter values
+$programmeFilter = $_GET['programme'] ?? '';
+$yearFilter = $_GET['year'] ?? '';
+$semesterFilter = $_GET['semester'] ?? '';
 $dayFilter = $_GET['day'] ?? '';
 $moduleFilter = $_GET['module'] ?? '';
 $lecturerFilter = $_GET['lecturer'] ?? '';
@@ -27,6 +30,21 @@ $query = "
 ";
 
 $params = [];
+
+if ($programmeFilter) {
+    $query .= " AND s.programme = ?";
+    $params[] = $programmeFilter;
+}
+
+if ($yearFilter) {
+    $query .= " AND s.year_level = ?";
+    $params[] = $yearFilter;
+}
+
+if ($semesterFilter) {
+    $query .= " AND s.semester = ?";
+    $params[] = $semesterFilter;
+}
 
 if ($dayFilter) {
     $query .= " AND s.day_of_week = ?";
@@ -68,6 +86,9 @@ $stmt->execute($params);
 $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get unique values for filters
+$programmes = $pdo->query("SELECT DISTINCT programme FROM sessions WHERE programme IS NOT NULL AND programme != '' ORDER BY programme")->fetchAll(PDO::FETCH_COLUMN);
+$years = $pdo->query("SELECT DISTINCT year_level FROM sessions WHERE year_level IS NOT NULL AND year_level != '' ORDER BY year_level")->fetchAll(PDO::FETCH_COLUMN);
+$semesters = $pdo->query("SELECT DISTINCT semester FROM sessions WHERE semester IS NOT NULL AND semester != '' ORDER BY semester")->fetchAll(PDO::FETCH_COLUMN);
 $days = $pdo->query("SELECT DISTINCT day_of_week FROM sessions ORDER BY day_of_week")->fetchAll(PDO::FETCH_COLUMN);
 $modules = $pdo->query("SELECT DISTINCT module_code FROM modules ORDER BY module_code")->fetchAll(PDO::FETCH_COLUMN);
 $lecturers = $pdo->query("SELECT DISTINCT lecturer_name FROM lecturers WHERE lecturer_name IS NOT NULL ORDER BY lecturer_name")->fetchAll(PDO::FETCH_COLUMN);
@@ -468,6 +489,42 @@ $totalSessions = count($sessions);
             <!-- Filters -->
             <form method="GET" class="filters">
                 <div class="filter-group">
+                    <label>Programme</label>
+                    <select name="programme">
+                        <option value="">All Programmes</option>
+                        <?php foreach ($programmes as $programme): ?>
+                            <option value="<?= htmlspecialchars($programme) ?>" <?= $programmeFilter === $programme ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($programme) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Year Level</label>
+                    <select name="year">
+                        <option value="">All Years</option>
+                        <?php foreach ($years as $year): ?>
+                            <option value="<?= htmlspecialchars($year) ?>" <?= $yearFilter === $year ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($year) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Semester</label>
+                    <select name="semester">
+                        <option value="">All Semesters</option>
+                        <?php foreach ($semesters as $semester): ?>
+                            <option value="<?= htmlspecialchars($semester) ?>" <?= $semesterFilter === $semester ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($semester) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
                     <label>Day</label>
                     <select name="day">
                         <option value="">All Days</option>
@@ -504,8 +561,17 @@ $totalSessions = count($sessions);
             <div class="summary">
                 <div class="summary-text">
                     Showing <span class="summary-count"><?= $totalSessions ?></span> session<?= $totalSessions !== 1 ? 's' : '' ?>
-                    <?php if ($dayFilter || $moduleFilter || $lecturerFilter || $venueFilter): ?>
+                    <?php if ($programmeFilter || $yearFilter || $semesterFilter || $dayFilter || $moduleFilter || $lecturerFilter || $venueFilter): ?>
                         (filtered)
+                    <?php endif; ?>
+                    <?php if ($programmeFilter): ?>
+                        <br><span style="font-size: 12px; color: rgba(255,255,255,0.5);">Programme: <?= htmlspecialchars($programmeFilter) ?></span>
+                    <?php endif; ?>
+                    <?php if ($yearFilter): ?>
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.5);"> | Year: <?= htmlspecialchars($yearFilter) ?></span>
+                    <?php endif; ?>
+                    <?php if ($semesterFilter): ?>
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.5);"> | Semester: <?= htmlspecialchars($semesterFilter) ?></span>
                     <?php endif; ?>
                 </div>
             </div>
@@ -546,6 +612,29 @@ $totalSessions = count($sessions);
                                             (<?= htmlspecialchars($session['module_code'] ?? 'N/A') ?>)
                                         </span>
                                     </div>
+                                    
+                                    <?php if ($session['programme'] || $session['year_level'] || $session['semester']): ?>
+                                        <div class="session-details" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                            <?php if ($session['programme']): ?>
+                                                <div class="session-detail">
+                                                    <span class="session-detail-icon">📜</span>
+                                                    <span><?= htmlspecialchars($session['programme']) ?></span>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if ($session['year_level']): ?>
+                                                <div class="session-detail">
+                                                    <span class="session-detail-icon">📅</span>
+                                                    <span>Year <?= htmlspecialchars($session['year_level']) ?></span>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if ($session['semester']): ?>
+                                                <div class="session-detail">
+                                                    <span class="session-detail-icon">📆</span>
+                                                    <span><?= htmlspecialchars($session['semester']) ?></span>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
                                     
                                     <div class="session-details">
                                         <?php if ($session['lecturer_name']): ?>

@@ -302,14 +302,18 @@ function saveParsedData($previewData, $pdo) {
             // module_id → links to modules table
             // lecturer_id → links to lecturers table (can be NULL)
             // venue_id → links to venues table (can be NULL)
-            $stmt = $pdo->prepare("INSERT INTO sessions (module_id, lecturer_id, venue_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?)");
+            // programme, year_level, semester → from parsed data
+            $stmt = $pdo->prepare("INSERT INTO sessions (module_id, lecturer_id, venue_id, day_of_week, start_time, end_time, programme, year_level, semester) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $moduleId,
                 $lecturerId,  // Can be NULL if no lecturer
                 $venueId,     // Can be NULL if no venue
                 $session['day'],
                 $session['start_time'],
-                $session['end_time']
+                $session['end_time'],
+                $session['programme'] ?? null,
+                $session['year'] ?? null,
+                $session['semester'] ?? null
             ]);
             $createdCount++;
         } else {
