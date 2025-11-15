@@ -907,6 +907,9 @@ foreach ($programmeYearSemester as $row) {
     </div>
     
     <script>
+        // Wait for DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+        
         function toggleSelectAll() {
             const selectAll = document.getElementById('selectAll');
             const checkboxes = document.querySelectorAll('.session-checkbox');
@@ -1322,6 +1325,8 @@ foreach ($programmeYearSemester as $row) {
                 }, true);
             });
         });
+        
+        }); // End DOMContentLoaded
     </script>
 </body>
 </html>
