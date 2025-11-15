@@ -1174,7 +1174,8 @@ foreach ($programmeYearSemester as $row) {
                     
                     fetch('timetable_editor.php', {
                         method: 'POST',
-                        body: formData
+                        body: formData,
+                        cache: 'no-cache'
                     })
                     .then(response => {
                         if (!response.ok) {
@@ -1184,11 +1185,12 @@ foreach ($programmeYearSemester as $row) {
                     })
                     .then(data => {
                         if (data.success) {
-                            // Immediately reload page to show updated data
-                            window.location.reload();
+                            // Immediately reload page to show updated data with current filters preserved
+                            const urlParams = new URLSearchParams(window.location.search);
+                            window.location.href = 'timetable_editor.php' + (urlParams.toString() ? '?' + urlParams.toString() : '');
                         } else {
                             this.innerHTML = originalHTML;
-                            alert('Error updating field');
+                            alert('Error updating field: ' + (data.error || 'Unknown error'));
                         }
                     })
                     .catch(error => {
