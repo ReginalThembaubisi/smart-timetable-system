@@ -1215,31 +1215,36 @@ foreach ($programmeYearSemester as $row) {
                 // Store reference to field for escape handler
                 const fieldElement = this;
                 
-                // For select elements, save on change instead of blur
+                // For select elements, don't auto-save - require explicit save
                 if (input.tagName === 'SELECT') {
-                    // Don't save on blur for selects - only on change
-                    input.addEventListener('change', function() {
-                        // Small delay to allow selection to register
-                        setTimeout(() => {
-                            if (!isSaving) {
-                                saveField();
-                            }
-                        }, 100);
-                    });
-                    
                     // Add a save button for selects
                     const saveBtn = document.createElement('button');
-                    saveBtn.textContent = '✓';
-                    saveBtn.style.cssText = 'margin-left: 4px; padding: 4px 8px; background: #667eea; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 12px;';
+                    saveBtn.textContent = '✓ Save';
+                    saveBtn.style.cssText = 'margin-left: 4px; padding: 4px 12px; background: #667eea; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 12px; font-weight: 600;';
                     saveBtn.onclick = function(e) {
                         e.stopPropagation();
+                        e.preventDefault();
                         if (!isSaving) {
                             saveField();
                         }
+                        return false;
                     };
                     fieldElement.appendChild(saveBtn);
                     
-                    // Also allow Enter key to save
+                    // Add cancel button
+                    const cancelBtn = document.createElement('button');
+                    cancelBtn.textContent = '✕';
+                    cancelBtn.style.cssText = 'margin-left: 4px; padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: white; cursor: pointer; font-size: 12px;';
+                    cancelBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        isSaving = false;
+                        fieldElement.innerHTML = originalHTML;
+                        return false;
+                    };
+                    fieldElement.appendChild(cancelBtn);
+                    
+                    // Allow Enter key to save
                     input.addEventListener('keydown', function(e) {
                         if (e.key === 'Enter') {
                             e.preventDefault();
