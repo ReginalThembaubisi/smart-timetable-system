@@ -16,7 +16,6 @@ $messageType = '';
 // Handle data clearing
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['clear_data'])) {
     $clearType = $_POST['clear_type'] ?? '';
-    $confirmText = $_POST['confirm_text'] ?? '';
     
     if (!isset($_POST['confirm_checkbox'])) {
         $message = 'Please check the confirmation box to proceed.';
