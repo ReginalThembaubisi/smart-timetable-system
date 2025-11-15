@@ -13,8 +13,26 @@ $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $message = '';
 $messageType = '';
 $parsingResults = null;
+$previewData = null;
+$confirmed = false;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['timetable_file'])) {
+// Handle confirmation and save
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_parse'])) {
+    $previewDataJson = $_POST['preview_data'];
+    $previewData = json_decode($previewDataJson, true);
+    
+    if ($previewData) {
+        $results = saveParsedData($previewData, $pdo);
+        $parsingResults = $results;
+        $message = "Successfully parsed {$results['total_sessions']} sessions using SESSION format!";
+        $messageType = 'success';
+        $confirmed = true;
+        $previewData = null; // Clear preview after saving
+    }
+}
+
+// Handle file upload and parsing
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['timetable_file']) && !isset($_POST['confirm_parse'])) {
     $file = $_FILES['timetable_file'];
     
     if ($file['error'] === UPLOAD_ERR_OK) {
@@ -35,10 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['timetable_file'])) {
             }
             
             if ($content) {
-                $results = parseTimetableFile($content, $pdo);
-                $parsingResults = $results;
-                $message = "Successfully parsed {$results['total_sessions']} sessions using SESSION format!";
-                $messageType = 'success';
+                // Parse and preview only - don't save yet
+                $previewData = parseTimetableFilePreview($content);
+                $message = "Found {$previewData['total_sessions']} sessions. Review and confirm to save.";
+                $messageType = 'info';
             }
         } else {
             $message = 'Invalid file type. Please upload a TXT or PDF file.';
@@ -48,6 +66,224 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['timetable_file'])) {
         $message = 'Error uploading file.';
         $messageType = 'error';
     }
+}
+
+function parseTimetableFilePreview($content) {
+    // Parse and return preview data without saving
+    $lines = explode("\n", $content);
+    $sessions = [];
+    $currentProgramme = '';
+    $currentYear = '';
+    $currentSemester = '';
+    
+    $modulesFound = [];
+    $lecturersFound = [];
+    $venuesFound = [];
+    
+    $currentSession = null;
+    
+    foreach ($lines as $line) {
+        $line = trim($line);
+        
+        if (empty($line)) continue;
+        
+        // Parse header info
+        if (preg_match('/PROGRAMME:\s*(.+)/i', $line, $matches)) {
+            $currentProgramme = trim($matches[1]);
+        } elseif (preg_match('/YEAR LEVEL:\s*Year\s*(\d+)/i', $line, $matches)) {
+            $currentYear = trim($matches[1]);
+        } elseif (preg_match('/SEMESTER:\s*(.+)/i', $line, $matches)) {
+            $currentSemester = trim($matches[1]);
+        }
+        
+        // Parse session
+        if (preg_match('/SESSION\s*\d+:/i', $line)) {
+            if ($currentSession && !empty($currentSession['module']) && !empty($currentSession['day'])) {
+                $sessions[] = $currentSession;
+                
+                // Track unique items
+                if (!empty($currentSession['module'])) {
+                    $modulesFound[$currentSession['module']] = true;
+                }
+                if (!empty($currentSession['staff'])) {
+                    $lecturersFound[$currentSession['staff']] = true;
+                }
+                if (!empty($currentSession['room_name'])) {
+                    $venuesFound[$currentSession['room_name']] = true;
+                }
+            }
+            $currentSession = [
+                'programme' => $currentProgramme,
+                'year' => $currentYear,
+                'semester' => $currentSemester,
+            ];
+        } elseif ($currentSession) {
+            if (preg_match('/Day:\s*(.+)/i', $line, $matches)) {
+                $currentSession['day'] = trim($matches[1]);
+            } elseif (preg_match('/Time:\s*(\d{2}:\d{2})-(\d{2}:\d{2})/i', $line, $matches)) {
+                $currentSession['start_time'] = $matches[1] . ':00';
+                $currentSession['end_time'] = $matches[2] . ':00';
+            } elseif (preg_match('/Module:\s*(.+)/i', $line, $matches)) {
+                $moduleCode = trim($matches[1]);
+                if (!empty($moduleCode)) {
+                    $currentSession['module'] = $moduleCode;
+                }
+            } elseif (preg_match('/Staff:\s*(.+)/i', $line, $matches)) {
+                $currentSession['staff'] = trim($matches[1]);
+            } elseif (preg_match('/Room:\s*(.+)/i', $line, $matches)) {
+                $roomInfo = trim($matches[1]);
+                // Extract room code and name
+                if (preg_match('/^([^\s\(]+)\s*\((.+)\)/', $roomInfo, $roomMatches)) {
+                    $currentSession['room_code'] = $roomMatches[1];
+                    $currentSession['room_name'] = $roomMatches[2];
+                } else {
+                    $currentSession['room_name'] = $roomInfo;
+                }
+            }
+        }
+    }
+    
+    // Add last session
+    if ($currentSession && !empty($currentSession['module']) && !empty($currentSession['day'])) {
+        $sessions[] = $currentSession;
+        if (!empty($currentSession['module'])) {
+            $modulesFound[$currentSession['module']] = true;
+        }
+        if (!empty($currentSession['staff'])) {
+            $lecturersFound[$currentSession['staff']] = true;
+        }
+        if (!empty($currentSession['room_name'])) {
+            $venuesFound[$currentSession['room_name']] = true;
+        }
+    }
+    
+    return [
+        'sessions' => $sessions,
+        'total_sessions' => count($sessions),
+        'programmes' => count(array_unique(array_column($sessions, 'programme'))),
+        'modules_count' => count($modulesFound),
+        'lecturers_count' => count($lecturersFound),
+        'venues_count' => count($venuesFound),
+        'modules' => array_keys($modulesFound),
+        'lecturers' => array_keys($lecturersFound),
+        'venues' => array_keys($venuesFound),
+    ];
+}
+
+function saveParsedData($previewData, $pdo) {
+    // Save the parsed data to database
+    $modulesCreated = [];
+    $lecturersCreated = [];
+    $venuesCreated = [];
+    
+    $createdCount = 0;
+    $skippedCount = 0;
+    
+    foreach ($previewData['sessions'] as $session) {
+        if (empty($session['module']) || empty($session['day']) || empty($session['start_time'])) {
+            $skippedCount++;
+            continue;
+        }
+        
+        // Get or create module
+        $moduleCode = $session['module'];
+        $moduleId = null;
+        
+        if (!isset($modulesCreated[$moduleCode])) {
+            $stmt = $pdo->prepare("SELECT module_id FROM modules WHERE module_code = ?");
+            $stmt->execute([$moduleCode]);
+            $existing = $stmt->fetch();
+            
+            if ($existing) {
+                $moduleId = $existing['module_id'];
+            } else {
+                // Create module
+                $stmt = $pdo->prepare("INSERT INTO modules (module_code, module_name, credits) VALUES (?, ?, ?)");
+                $stmt->execute([$moduleCode, $moduleCode, 0]);
+                $moduleId = $pdo->lastInsertId();
+            }
+            $modulesCreated[$moduleCode] = $moduleId;
+        } else {
+            $moduleId = $modulesCreated[$moduleCode];
+        }
+        
+        // Get or create lecturer
+        $lecturerName = $session['staff'] ?? '';
+        $lecturerId = null;
+        
+        if (!empty($lecturerName)) {
+            if (!isset($lecturersCreated[$lecturerName])) {
+                $stmt = $pdo->prepare("SELECT lecturer_id FROM lecturers WHERE lecturer_name = ?");
+                $stmt->execute([$lecturerName]);
+                $existing = $stmt->fetch();
+                
+                if ($existing) {
+                    $lecturerId = $existing['lecturer_id'];
+                } else {
+                    $stmt = $pdo->prepare("INSERT INTO lecturers (lecturer_name, email) VALUES (?, ?)");
+                    $stmt->execute([$lecturerName, '']);
+                    $lecturerId = $pdo->lastInsertId();
+                }
+                $lecturersCreated[$lecturerName] = $lecturerId;
+            } else {
+                $lecturerId = $lecturersCreated[$lecturerName];
+            }
+        }
+        
+        // Get or create venue
+        $venueName = $session['room_name'] ?? $session['room_code'] ?? '';
+        $venueId = null;
+        
+        if (!empty($venueName)) {
+            if (!isset($venuesCreated[$venueName])) {
+                $stmt = $pdo->prepare("SELECT venue_id FROM venues WHERE venue_name = ?");
+                $stmt->execute([$venueName]);
+                $existing = $stmt->fetch();
+                
+                if ($existing) {
+                    $venueId = $existing['venue_id'];
+                } else {
+                    $stmt = $pdo->prepare("INSERT INTO venues (venue_name, capacity) VALUES (?, ?)");
+                    $stmt->execute([$venueName, 0]);
+                    $venueId = $pdo->lastInsertId();
+                }
+                $venuesCreated[$venueName] = $venueId;
+            } else {
+                $venueId = $venuesCreated[$venueName];
+            }
+        }
+        
+        // Check if session already exists
+        $stmt = $pdo->prepare("SELECT session_id FROM sessions WHERE module_id = ? AND day_of_week = ? AND start_time = ?");
+        $stmt->execute([$moduleId, $session['day'], $session['start_time']]);
+        $existing = $stmt->fetch();
+        
+        if (!$existing) {
+            // Insert session
+            $stmt = $pdo->prepare("INSERT INTO sessions (module_id, lecturer_id, venue_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->execute([
+                $moduleId,
+                $lecturerId,
+                $venueId,
+                $session['day'],
+                $session['start_time'],
+                $session['end_time']
+            ]);
+            $createdCount++;
+        } else {
+            $skippedCount++;
+        }
+    }
+    
+    return [
+        'total_sessions' => $previewData['total_sessions'],
+        'created' => $createdCount,
+        'skipped' => $skippedCount,
+        'programmes' => $previewData['programmes'],
+        'modules' => count($modulesCreated),
+        'lecturers' => count($lecturersCreated),
+        'venues' => count($venuesCreated),
+    ];
 }
 
 function parseTimetableFile($content, $pdo) {
@@ -524,9 +760,53 @@ function parseTimetableFile($content, $pdo) {
             </div>
             
             <?php if ($message): ?>
-            <div class="success-banner">
-                <span>✅</span>
+            <div class="success-banner" style="background: <?= $messageType === 'error' ? '#e74c3c' : ($messageType === 'info' ? '#3498db' : '#27ae60') ?>;">
+                <span><?= $messageType === 'error' ? '❌' : ($messageType === 'info' ? 'ℹ️' : '✅') ?></span>
                 <span><?= htmlspecialchars($message) ?></span>
+            </div>
+            <?php endif; ?>
+            
+            <?php if ($previewData && !$confirmed): ?>
+            <!-- Preview Card -->
+            <div class="results-card">
+                <div class="results-header">
+                    <div>
+                        <h3>Preview: Ready to Import</h3>
+                        <p>Review the import summary below. Click "Confirm & Import" to save to database.</p>
+                    </div>
+                    <span class="tag">✨ SESSION format detected</span>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card stat-card-large">
+                        <div class="stat-label">Total Sessions</div>
+                        <div class="stat-value"><?= $previewData['total_sessions'] ?></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Programmes</div>
+                        <div class="stat-value" style="font-size: 28px;"><?= $previewData['programmes'] ?></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Modules</div>
+                        <div class="stat-value" style="font-size: 28px;"><?= $previewData['modules_count'] ?></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Lecturers</div>
+                        <div class="stat-value" style="font-size: 28px;"><?= $previewData['lecturers_count'] ?></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Venues</div>
+                        <div class="stat-value" style="font-size: 28px;"><?= $previewData['venues_count'] ?></div>
+                    </div>
+                </div>
+                
+                <form method="POST" style="margin-top: 25px;">
+                    <input type="hidden" name="preview_data" value="<?= htmlspecialchars(json_encode($previewData)) ?>">
+                    <div class="action-buttons">
+                        <button type="submit" name="confirm_parse" class="btn btn-primary">✅ Confirm & Import</button>
+                        <a href="timetable_pdf_parser.php" class="btn btn-secondary">❌ Cancel</a>
+                    </div>
+                </form>
             </div>
             <?php endif; ?>
             
@@ -573,6 +853,7 @@ function parseTimetableFile($content, $pdo) {
                 
                 <div class="action-buttons">
                     <a href="dashboard.php" class="btn btn-primary">📊 Go to dashboard</a>
+                    <a href="timetable_editor.php" class="btn btn-primary">✏️ Edit Sessions</a>
                     <a href="timetable_pdf_parser.php" class="btn btn-secondary">📄 Parse another file</a>
                 </div>
             </div>
