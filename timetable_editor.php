@@ -57,8 +57,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_lecturer_name'
     exit;
 }
 
+// Ensure programme, year_level, and semester columns exist
+try {
+    $columns = $pdo->query("SHOW COLUMNS FROM sessions LIKE 'programme'")->fetch();
+    if (!$columns) {
+        $pdo->exec("ALTER TABLE sessions ADD COLUMN programme VARCHAR(255) NULL AFTER session_id");
+        $pdo->exec("ALTER TABLE sessions ADD COLUMN year_level VARCHAR(50) NULL AFTER programme");
+        $pdo->exec("ALTER TABLE sessions ADD COLUMN semester VARCHAR(50) NULL AFTER year_level");
+        $pdo->exec("ALTER TABLE sessions ADD INDEX idx_programme (programme)");
+        $pdo->exec("ALTER TABLE sessions ADD INDEX idx_year_level (year_level)");
+        $pdo->exec("ALTER TABLE sessions ADD INDEX idx_semester (semester)");
+    }
+} catch (PDOException $e) {
+    // Columns might already exist, ignore error
+}
+
 // Get filter values
 $programmeFilter = $_GET['programme'] ?? '';
+$yearFilter = $_GET['year'] ?? '';
+$semesterFilter = $_GET['semester'] ?? '';
 $searchFilter = $_GET['search'] ?? '';
 
 // Get sessions with joins
@@ -72,6 +89,21 @@ $query = "
 ";
 
 $params = [];
+
+if ($programmeFilter) {
+    $query .= " AND s.programme = ?";
+    $params[] = $programmeFilter;
+}
+
+if ($yearFilter) {
+    $query .= " AND s.year_level = ?";
+    $params[] = $yearFilter;
+}
+
+if ($semesterFilter) {
+    $query .= " AND s.semester = ?";
+    $params[] = $semesterFilter;
+}
 
 if ($searchFilter) {
     $query .= " AND (m.module_code LIKE ? OR m.module_name LIKE ? OR l.lecturer_name LIKE ? OR v.venue_name LIKE ?)";
@@ -89,6 +121,37 @@ $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $lecturers = $pdo->query("SELECT * FROM lecturers ORDER BY lecturer_name")->fetchAll(PDO::FETCH_ASSOC);
 $venues = $pdo->query("SELECT * FROM venues ORDER BY venue_name")->fetchAll(PDO::FETCH_ASSOC);
 $modules = $pdo->query("SELECT * FROM modules ORDER BY module_code")->fetchAll(PDO::FETCH_ASSOC);
+
+// Get programme/year/semester data for filters
+$programmes = $pdo->query("SELECT DISTINCT programme FROM sessions WHERE programme IS NOT NULL AND programme != '' ORDER BY programme")->fetchAll(PDO::FETCH_COLUMN);
+$programmeYearSemester = $pdo->query("
+    SELECT DISTINCT programme, year_level, semester 
+    FROM sessions 
+    WHERE programme IS NOT NULL AND programme != '' 
+    AND year_level IS NOT NULL AND year_level != ''
+    AND semester IS NOT NULL AND semester != ''
+    ORDER BY programme, year_level, semester
+")->fetchAll(PDO::FETCH_ASSOC);
+
+// Build data structure for JavaScript
+$filterData = [];
+foreach ($programmeYearSemester as $row) {
+    $prog = trim($row['programme']);
+    $year = trim($row['year_level']);
+    $sem = trim($row['semester']);
+    
+    if (empty($prog) || empty($year) || empty($sem)) continue;
+    
+    if (!isset($filterData[$prog])) {
+        $filterData[$prog] = [];
+    }
+    if (!isset($filterData[$prog][$year])) {
+        $filterData[$prog][$year] = [];
+    }
+    if (!in_array($sem, $filterData[$prog][$year])) {
+        $filterData[$prog][$year][] = $sem;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
