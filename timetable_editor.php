@@ -57,6 +57,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_lecturer_name'
     exit;
 }
 
+// Handle inline session updates
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_session_inline'])) {
+    $sessionId = $_POST['session_id'];
+    $lecturerId = $_POST['lecturer_id'] ?? null;
+    $venueId = $_POST['venue_id'] ?? null;
+    $dayOfWeek = $_POST['day_of_week'] ?? null;
+    $startTime = $_POST['start_time'] ?? null;
+    $endTime = $_POST['end_time'] ?? null;
+    
+    // If lecturer name is provided but no ID, find or create lecturer
+    if (isset($_POST['lecturer_name']) && !empty($_POST['lecturer_name']) && !$lecturerId) {
+        $lecturerName = trim($_POST['lecturer_name']);
+        $stmt = $pdo->prepare("SELECT lecturer_id FROM lecturers WHERE lecturer_name = ?");
+        $stmt->execute([$lecturerName]);
+        $existing = $stmt->fetch();
+        if ($existing) {
+            $lecturerId = $existing['lecturer_id'];
+        } else {
+            $stmt = $pdo->prepare("INSERT INTO lecturers (lecturer_name, email) VALUES (?, '')");
+            $stmt->execute([$lecturerName]);
+            $lecturerId = $pdo->lastInsertId();
+        }
+    }
+    
+    // If venue name is provided but no ID, find or create venue
+    if (isset($_POST['venue_name']) && !empty($_POST['venue_name']) && !$venueId) {
+        $venueName = trim($_POST['venue_name']);
+        $stmt = $pdo->prepare("SELECT venue_id FROM venues WHERE venue_name = ?");
+        $stmt->execute([$venueName]);
+        $existing = $stmt->fetch();
+        if ($existing) {
+            $venueId = $existing['venue_id'];
+        } else {
+            $stmt = $pdo->prepare("INSERT INTO venues (venue_name, capacity) VALUES (?, 0)");
+            $stmt->execute([$venueName]);
+            $venueId = $pdo->lastInsertId();
+        }
+    }
+    
+    $stmt = $pdo->prepare("UPDATE sessions SET lecturer_id = ?, venue_id = ?, day_of_week = ?, start_time = ?, end_time = ? WHERE session_id = ?");
+    $stmt->execute([$lecturerId, $venueId, $dayOfWeek, $startTime, $endTime, $sessionId]);
+    
+    header('Content-Type: application/json');
+    echo json_encode(['success' => true]);
+    exit;
+}
+
 // Ensure programme, year_level, and semester columns exist
 try {
     $columns = $pdo->query("SHOW COLUMNS FROM sessions LIKE 'programme'")->fetch();
@@ -675,14 +722,62 @@ foreach ($programmeYearSemester as $row) {
                                 <div class="session-details"><?= htmlspecialchars($session['module_name'] ?? '') ?></div>
                             </td>
                             <td>
-                                <span style="cursor: pointer;" onclick="openEditLecturerModal(<?= $session['lecturer_id'] ?>, '<?= htmlspecialchars($session['lecturer_name'] ?? '') ?>')">
+                                <span class="editable-field" 
+                                      data-field="lecturer" 
+                                      data-session-id="<?= $session['session_id'] ?>"
+                                      data-lecturer-id="<?= $session['lecturer_id'] ?? '' ?>"
+                                      data-current-value="<?= htmlspecialchars($session['lecturer_name'] ?? '-') ?>"
+                                      style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: inline-block; min-width: 100px;"
+                                      onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'"
+                                      onmouseout="this.style.background='transparent'">
                                     <?= htmlspecialchars($session['lecturer_name'] ?? '-') ?>
                                 </span>
                             </td>
-                            <td><?= htmlspecialchars($session['venue_name'] ?? '-') ?></td>
-                            <td><?= htmlspecialchars($session['day_of_week']) ?></td>
-                            <td><?= htmlspecialchars(substr($session['start_time'], 0, 5)) ?></td>
-                            <td><?= htmlspecialchars(substr($session['end_time'], 0, 5)) ?></td>
+                            <td>
+                                <span class="editable-field" 
+                                      data-field="venue" 
+                                      data-session-id="<?= $session['session_id'] ?>"
+                                      data-venue-id="<?= $session['venue_id'] ?? '' ?>"
+                                      data-current-value="<?= htmlspecialchars($session['venue_name'] ?? '-') ?>"
+                                      style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: inline-block; min-width: 100px;"
+                                      onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'"
+                                      onmouseout="this.style.background='transparent'">
+                                    <?= htmlspecialchars($session['venue_name'] ?? '-') ?>
+                                </span>
+                            </td>
+                            <td>
+                                <span class="editable-field" 
+                                      data-field="day" 
+                                      data-session-id="<?= $session['session_id'] ?>"
+                                      data-current-value="<?= htmlspecialchars($session['day_of_week']) ?>"
+                                      style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: inline-block; min-width: 80px;"
+                                      onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'"
+                                      onmouseout="this.style.background='transparent'">
+                                    <?= htmlspecialchars($session['day_of_week']) ?>
+                                </span>
+                            </td>
+                            <td>
+                                <span class="editable-field" 
+                                      data-field="start_time" 
+                                      data-session-id="<?= $session['session_id'] ?>"
+                                      data-current-value="<?= htmlspecialchars(substr($session['start_time'], 0, 5)) ?>"
+                                      style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: inline-block; min-width: 60px;"
+                                      onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'"
+                                      onmouseout="this.style.background='transparent'">
+                                    <?= htmlspecialchars(substr($session['start_time'], 0, 5)) ?>
+                                </span>
+                            </td>
+                            <td>
+                                <span class="editable-field" 
+                                      data-field="end_time" 
+                                      data-session-id="<?= $session['session_id'] ?>"
+                                      data-current-value="<?= htmlspecialchars(substr($session['end_time'], 0, 5)) ?>"
+                                      style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: inline-block; min-width: 60px;"
+                                      onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'"
+                                      onmouseout="this.style.background='transparent'">
+                                    <?= htmlspecialchars(substr($session['end_time'], 0, 5)) ?>
+                                </span>
+                            </td>
                             <td>
                                 <a href="?delete=1&id=<?= $session['session_id'] ?>" class="btn-delete" onclick="return confirm('Are you sure?')">🗑️ Delete</a>
                             </td>
