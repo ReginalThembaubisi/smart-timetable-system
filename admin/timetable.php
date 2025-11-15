@@ -49,6 +49,7 @@ if (isset($_GET['edit'])) {
 <body>
     <?php include 'header.php'; ?>
     <div class="container">
+        <a href="index.php" class="back-link">← Back to Dashboard</a>
         <h2>Manage Timetable Sessions</h2>
         <form method="POST" class="form">
             <input type="hidden" name="session_id" value="<?= $editSession['session_id'] ?? '' ?>">

@@ -45,6 +45,7 @@ if (isset($_GET['edit'])) {
 <body>
     <?php include 'header.php'; ?>
     <div class="container">
+        <a href="index.php" class="back-link">← Back to Dashboard</a>
         <h2>Manage Lecturers</h2>
         <form method="POST" class="form">
             <input type="hidden" name="lecturer_id" value="<?= $editLecturer['lecturer_id'] ?? '' ?>">
