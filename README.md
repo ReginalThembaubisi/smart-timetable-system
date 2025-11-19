@@ -1,196 +1,142 @@
-# Smart Timetable System
+# Smart Timetable Management System
 
-A comprehensive timetable management system with Flutter mobile app and PHP web admin panel.
+A timetable management system I built for my university project. It includes a Flutter mobile app for students and a PHP web interface for administrators to manage everything.
+
+## What This Does
+
+Basically, it's a system that helps universities manage class schedules. Students can view their timetables on their phones, and admins can create schedules, manage modules, and handle all the admin stuff through a web interface.
 
 ## Features
 
-### Admin Panel (Web Interface)
-- **Dashboard** - Overview with statistics
-- **Student Management** - Add, edit, delete students
-- **Module Management** - Manage course modules
-- **Lecturer Management** - Manage lecturer information
-- **Venue Management** - Manage classrooms and venues
-- **Timetable Management** - Create and manage class sessions
-- **Exam Management** - Schedule exams
-- **Student Enrollment** - Enroll students in modules
-- **Study Sessions** - View student-created study sessions
+### For Students (Mobile App)
+- Login with student number and password
+- View your daily and weekly timetable
+- See all your enrolled modules
+- Create and track study sessions
+- Built-in study timer
+- Check exam schedules and get notifications
+- Works offline once you've loaded your data
 
-### Mobile App (Flutter)
-- Student login
-- View personal timetable
-- View enrolled modules
-- View exam timetable
-- Create and manage study sessions
-- Profile management
-- Change password
+### For Admins (Web Interface)
+- Manage students - add, edit, view all student info
+- Manage modules - create courses, assign to programs
+- Manage lecturers - add lecturer details
+- Manage venues - add classrooms and locations
+- Create timetables - schedule classes, assign lecturers and venues
+- Manage exams - schedule exams and send notifications
+- Bulk import/export - handle large amounts of data at once
+- Search and filter - find anything quickly
 
-## Setup Instructions
+## Tech Stack
 
-### 1. Database Setup
+**Frontend:**
+- Flutter (for the mobile app)
+- Dart
 
-#### Option A: Using the Web Installer (Recommended)
-1. Make sure XAMPP is running (Apache and MySQL)
-2. Open browser: `http://localhost/setup_database.php`
-3. Click "Setup Database" button
-4. Optionally check "Insert sample data" for test data
+**Backend:**
+- PHP
+- MySQL
+- REST APIs for communication between app and server
 
-#### Option B: Using phpMyAdmin
-1. Open phpMyAdmin: `http://localhost/phpmyadmin`
-2. Click "Import" tab
-3. Choose file: `database_setup.sql`
-4. Click "Go"
+**Tools:**
+- XAMPP for local development
+- Composer for PHP packages
+- PDO for database stuff
 
-### 2. Admin Panel Access
+## Project Structure
 
-1. Open: `http://localhost/admin/login.php`
-2. Default credentials:
-   - Username: `admin`
-   - Password: `admin123`
+The backend PHP files are in the admin folder, and the Flutter mobile app is in a separate folder. The admin folder has all the API endpoints, database connection files, and the web interface for managing everything.
 
-**⚠️ Change these credentials in production!**
+## Setup
 
-### 3. Test Student Credentials
+**What you need:**
+- XAMPP (with PHP and MySQL)
+- Flutter installed
+- Android Studio or VS Code
+- Composer (for PHP stuff)
 
-If you inserted sample data:
-- **Student Number**: `202057420`
-- **Password**: `password123`
-- **Student ID**: `3`
+**Getting it running:**
 
-### 4. API Configuration
+1. **Database:**
+   - Open phpMyAdmin
+   - Import `database_setup.sql` to create all the tables
 
-The Flutter app connects to:
-- Default: `http://localhost`
-- If your public folder is in a subdirectory, update `lib/config/app_config.dart`
+2. **Backend:**
+   - Put the admin folder in your XAMPP htdocs
+   - Update database settings in `admin/config.php` (usually just leave it as default for XAMPP)
+   - Run `composer install` if needed
 
-## Database Structure
-
-### Tables
-- `students` - Student accounts
-- `modules` - Course modules
-- `lecturers` - Lecturer information
-- `venues` - Classroom/venue information
-- `sessions` - Timetable class sessions
-- `student_modules` - Student enrollments (many-to-many)
-- `exams` - Exam schedules
-- `study_sessions` - Student-created study sessions
-- `exam_notifications` - Exam notifications for students
+3. **Mobile App:**
+   - Open the Flutter project in Android Studio
+   - Run `flutter pub get`
+   - Update the API URL in `lib/config/app_config.dart`:
+     - For emulator: `http://10.0.2.2/admin`
+     - For real phone: `http://YOUR_COMPUTER_IP/admin`
+   - Run the app
 
 ## API Endpoints
 
-All API endpoints are in the `public` folder:
+The mobile app talks to these PHP files:
 
-- `student_login_api.php` - Student authentication
-- `get_student_timetable.php` - Get student's timetable
-- `student_modules_api.php` - Get student's enrolled modules
-- `get_student_exam_timetable.php` - Get student's exam schedule
-- `get_student_exam_notifications.php` - Get exam notifications
-- `study_sessions_api.php` - CRUD operations for study sessions
-- `update_student_profile.php` - Update student profile
-- `change_password_api.php` - Change student password
-- `fetch_all_modules.php` - Get all available modules
-- `mark_notification_read.php` - Mark notification as read
+**Login:**
+- `student_login_api.php` - Students log in here
 
-## File Structure
+**Timetable:**
+- `get_student_timetable.php?student_id=X` - Gets a student's class schedule
+- `get_student_exam_timetable.php?student_id=X` - Gets exam schedule
 
-```
-public/
-├── admin/                 # Admin web panel
-│   ├── index.php         # Dashboard
-│   ├── login.php         # Admin login
-│   ├── students.php      # Student management
-│   ├── modules.php       # Module management
-│   ├── lecturers.php     # Lecturer management
-│   ├── venues.php        # Venue management
-│   ├── timetable.php     # Timetable management
-│   ├── exams.php         # Exam management
-│   ├── student_modules.php  # Enrollment management
-│   ├── study_sessions.php   # Study session management
-│   └── style.css         # Admin panel styles
-├── *.php                 # API endpoints
-├── database_setup.sql    # Database setup SQL
-├── setup_database.php    # Web database installer
-└── README.md            # This file
-```
+**Modules:**
+- `student_modules_api.php?student_id=X` - Gets modules a student is enrolled in
+- `fetch_all_modules.php` - Gets all available modules
 
-## Usage
+**Profile:**
+- `update_student_profile.php` - Update student info
+- `change_password_api.php` - Change password
 
-### Admin Panel Workflow
+## Database
 
-1. **Setup Base Data**
-   - Add modules
-   - Add lecturers
-   - Add venues
-   - Add students
+Main tables in the database:
+- students - stores student info
+- modules - course modules
+- sessions - class timetable entries
+- lecturers - lecturer details
+- venues - classrooms and locations
+- exams - exam schedules
+- student_modules - links students to their enrolled modules
 
-2. **Create Timetable**
-   - Go to "Manage Timetable"
-   - Add sessions (class times) for each module
+## About This Project
 
-3. **Enroll Students**
-   - Go to "Student Enrollment"
-   - Enroll students in their modules
+I built this for my ICT Application Development course at University of Mpumalanga. It was a good way to learn full-stack development - I got to work with databases, APIs, and mobile app development all in one project.
 
-4. **Schedule Exams**
-   - Go to "Manage Exams"
-   - Add exam schedules for modules
+## Screenshots
 
-### Mobile App Workflow
+### Admin Interface
 
-1. Students login with student number and password
-2. View their personalized timetable
-3. View enrolled modules
-4. View exam schedule
-5. Create personal study sessions
+![Admin Dashboard](screenshots/admin-1.png)
+![Admin Timetable](screenshots/admin-2.png)
+![Admin Modules](screenshots/admin-3.png)
+![Admin Students](screenshots/admin-4.png)
+![Admin Exams](screenshots/admin-5.png)
 
-## Development
+### Student Mobile App
 
-### Database Connection
+![App Home](screenshots/app-1.png)
+![Timetable View](screenshots/app-2.png)
+![Study Sessions](screenshots/app-3.png)
+![Modules](screenshots/app-4.png)
+![Exam Schedule](screenshots/app-5.png)
+![Settings](screenshots/app-6.png)
 
-Default connection settings (in `admin/config.php`):
-- Host: `localhost`
-- Database: `smart_timetable`
-- User: `root`
-- Password: `` (empty)
+## Author
 
-Update these in production!
-
-### API Base URL
-
-Update in Flutter app: `lib/config/app_config.dart`
-
-```dart
-static const String apiBaseUrl = 'http://localhost';
-```
-
-For mobile devices/emulators, use your computer's IP address:
-```dart
-static const String apiBaseUrl = 'http://192.168.1.100';
-```
-
-## Security Notes
-
-⚠️ **This is a development setup. For production:**
-
-1. Change admin login credentials
-2. Hash passwords properly
-3. Use prepared statements (already implemented)
-4. Add input validation
-5. Enable HTTPS
-6. Set secure database credentials
-7. Add CSRF protection
-8. Implement rate limiting
-
-## Support
-
-If you encounter issues:
-
-1. Check XAMPP is running (Apache + MySQL)
-2. Verify database is created: `smart_timetable`
-3. Check file permissions
-4. Review error logs in XAMPP
-5. Verify API URLs match your setup
+**Themba Ubisi**
+- GitHub: [@ReginalThembaubisi](https://github.com/ReginalThembaubisi)
 
 ## License
 
 Educational use only.
+
+---
+
+Note: This was built for educational purposes but could be adapted for real university use.
 

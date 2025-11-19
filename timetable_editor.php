@@ -6,27 +6,145 @@ if (!isset($_SESSION['admin_logged_in'])) {
 }
 
 require_once 'admin/config.php';
+require_once __DIR__ . '/includes/database.php';
+require_once __DIR__ . '/includes/helpers.php';
 
-$pdo = new PDO("mysql:host=localhost;dbname=smart_timetable", "root", "");
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo = Database::getInstance()->getConnection();
+
+// Handle single-session creation (AJAX)
+if (
+	$_SERVER['REQUEST_METHOD'] === 'POST'
+	&& (
+		isset($_POST['create_session'])
+		|| (isset($_POST['module_id'], $_POST['day_of_week'], $_POST['start_time'], $_POST['end_time']) && !isset($_POST['update_session_inline']))
+	)
+) {
+	header('Content-Type: application/json');
+	try {
+		$moduleId = $_POST['module_id'] ?? null;
+		$lecturerId = $_POST['lecturer_id'] ?? null;
+		$venueId = $_POST['venue_id'] ?? null;
+		$dayOfWeek = $_POST['day_of_week'] ?? null;
+		$startTime = $_POST['start_time'] ?? null;
+		$endTime = $_POST['end_time'] ?? null;
+		$programme = $_POST['programme'] ?? null;
+		$yearLevel = $_POST['year_level'] ?? null;
+		$semester = $_POST['semester'] ?? null;
+		$lecturerName = trim($_POST['lecturer_name'] ?? '');
+		$venueName = trim($_POST['venue_name'] ?? '');
+
+		if (!$moduleId || !$dayOfWeek || !$startTime || !$endTime) {
+			http_response_code(400);
+			echo json_encode(['success' => false, 'error' => 'Missing required fields']);
+			exit;
+		}
+
+		// Normalize times to HH:MM:SS
+		$normalizeTime = function($t) {
+			$t = trim($t);
+			if ($t === '') return null;
+			if (preg_match('/^\d{2}:\d{2}$/', $t)) return $t . ':00';
+			return $t;
+		};
+		$startTime = $normalizeTime($startTime);
+		$endTime = $normalizeTime($endTime);
+
+		// Resolve lecturer by name if provided
+		if (!$lecturerId && $lecturerName !== '') {
+			$stmt = $pdo->prepare("SELECT lecturer_id FROM lecturers WHERE lecturer_name = ?");
+			$stmt->execute([$lecturerName]);
+			$row = $stmt->fetch();
+			if ($row) {
+				$lecturerId = $row['lecturer_id'];
+			} else {
+				$stmt = $pdo->prepare("INSERT INTO lecturers (lecturer_name, email) VALUES (?, '')");
+				$stmt->execute([$lecturerName]);
+				$lecturerId = $pdo->lastInsertId();
+			}
+		}
+
+		// Resolve venue by name if provided
+		if (!$venueId && $venueName !== '') {
+			$stmt = $pdo->prepare("SELECT venue_id FROM venues WHERE venue_name = ?");
+			$stmt->execute([$venueName]);
+			$row = $stmt->fetch();
+			if ($row) {
+				$venueId = $row['venue_id'];
+			} else {
+				$stmt = $pdo->prepare("INSERT INTO venues (venue_name, capacity) VALUES (?, 0)");
+				$stmt->execute([$venueName]);
+				$venueId = $pdo->lastInsertId();
+			}
+		}
+
+		// Detect day column name
+		$dayColumn = 'day_of_week';
+		try {
+			$col = $pdo->query("SHOW COLUMNS FROM sessions LIKE 'day_of_week'")->fetch();
+			if (!$col) {
+				$colAlt = $pdo->query("SHOW COLUMNS FROM sessions LIKE 'day'")->fetch();
+				if ($colAlt) $dayColumn = 'day';
+			}
+		} catch (Exception $e) {
+			// keep default
+			logError($e, 'Detecting day column in timetable editor');
+		}
+
+		$stmt = $pdo->prepare("
+			INSERT INTO sessions (module_id, lecturer_id, venue_id, $dayColumn, start_time, end_time, programme, year_level, semester)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		");
+		$stmt->execute([
+			$moduleId,
+			$lecturerId ?: null,
+			$venueId ?: null,
+			$dayOfWeek,
+			$startTime,
+			$endTime,
+			$programme ?: null,
+			$yearLevel ?: null,
+			$semester ?: null
+		]);
+
+		$sessionId = $pdo->lastInsertId();
+		logActivity('session_created', "Session ID: {$sessionId}", getCurrentUserId());
+		echo json_encode(['success' => true, 'session_id' => $sessionId]);
+		exit;
+	} catch (Exception $e) {
+		logError($e, 'Creating session in timetable editor');
+		http_response_code(500);
+		echo json_encode(['success' => false, 'error' => getErrorMessage($e, 'Creating session', false)]);
+		exit;
+	}
+}
 
 // Handle delete
 if (isset($_GET['delete']) && isset($_GET['id'])) {
-    $stmt = $pdo->prepare("DELETE FROM sessions WHERE session_id = ?");
-    $stmt->execute([$_GET['id']]);
+    try {
+        $stmt = $pdo->prepare("DELETE FROM sessions WHERE session_id = ?");
+        $stmt->execute([$_GET['id']]);
+        logActivity('session_deleted', "Session ID: {$_GET['id']}", getCurrentUserId());
+    } catch (Exception $e) {
+        logError($e, 'Deleting session');
+    }
     header('Location: timetable_editor.php');
     exit;
 }
 
 // Handle bulk lecturer update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_lecturer'])) {
-    $sessionIds = $_POST['session_ids'] ?? [];
-    $lecturerId = $_POST['lecturer_id'] ?? null;
-    
-    if (!empty($sessionIds) && $lecturerId) {
-        $placeholders = implode(',', array_fill(0, count($sessionIds), '?'));
-        $stmt = $pdo->prepare("UPDATE sessions SET lecturer_id = ? WHERE session_id IN ($placeholders)");
-        $stmt->execute(array_merge([$lecturerId], $sessionIds));
+    try {
+        $sessionIds = $_POST['session_ids'] ?? [];
+        $lecturerId = $_POST['lecturer_id'] ?? null;
+        
+        if (!empty($sessionIds) && $lecturerId) {
+            $placeholders = implode(',', array_fill(0, count($sessionIds), '?'));
+            $stmt = $pdo->prepare("UPDATE sessions SET lecturer_id = ? WHERE session_id IN ($placeholders)");
+            $stmt->execute(array_merge([$lecturerId], $sessionIds));
+            logActivity('bulk_lecturer_update', "Updated " . count($sessionIds) . " sessions", getCurrentUserId());
+        }
+    } catch (Exception $e) {
+        logError($e, 'Bulk lecturer update');
     }
     header('Location: timetable_editor.php');
     exit;
@@ -34,13 +152,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_lecturer'])) {
 
 // Handle bulk venue update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_venue'])) {
-    $sessionIds = $_POST['session_ids'] ?? [];
-    $venueId = $_POST['venue_id'] ?? null;
-    
-    if (!empty($sessionIds) && $venueId) {
-        $placeholders = implode(',', array_fill(0, count($sessionIds), '?'));
-        $stmt = $pdo->prepare("UPDATE sessions SET venue_id = ? WHERE session_id IN ($placeholders)");
-        $stmt->execute(array_merge([$venueId], $sessionIds));
+    try {
+        $sessionIds = $_POST['session_ids'] ?? [];
+        $venueId = $_POST['venue_id'] ?? null;
+        
+        if (!empty($sessionIds) && $venueId) {
+            $placeholders = implode(',', array_fill(0, count($sessionIds), '?'));
+            $stmt = $pdo->prepare("UPDATE sessions SET venue_id = ? WHERE session_id IN ($placeholders)");
+            $stmt->execute(array_merge([$venueId], $sessionIds));
+            logActivity('bulk_venue_update', "Updated " . count($sessionIds) . " sessions", getCurrentUserId());
+        }
+    } catch (Exception $e) {
+        logError($e, 'Bulk venue update');
     }
     header('Location: timetable_editor.php');
     exit;
@@ -97,6 +220,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_session_inline
     }
     
     try {
+        // Some databases might use 'day' instead of 'day_of_week' - detect column name
+        $dayColumn = 'day_of_week';
+        try {
+            $col = $pdo->query("SHOW COLUMNS FROM sessions LIKE 'day_of_week'")->fetch();
+            if (!$col) {
+                $colAlt = $pdo->query("SHOW COLUMNS FROM sessions LIKE 'day'")->fetch();
+                if ($colAlt) {
+                    $dayColumn = 'day';
+                }
+            }
+        } catch (Exception $e) {
+            // ignore; default to day_of_week
+            logError($e, 'Detecting day column for update');
+        }
         // Build dynamic UPDATE query based on what fields are provided
         $updates = [];
         $params = [];
@@ -110,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_session_inline
             $params[] = $venueId;
         }
         if (isset($_POST['day_of_week'])) {
-            $updates[] = "day_of_week = ?";
+            $updates[] = "$dayColumn = ?";
             $params[] = $dayOfWeek;
         }
         if (isset($_POST['start_time'])) {
@@ -134,13 +271,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_session_inline
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         
+        logActivity('session_updated', "Session ID: {$sessionId}", getCurrentUserId());
         header('Content-Type: application/json');
-        echo json_encode(['success' => true, 'message' => 'Session updated successfully']);
+        
+        // Return the updated value for the field that was changed
+        $updatedValue = null;
+        if (isset($_POST['day_of_week'])) {
+            $updatedValue = $_POST['day_of_week'];
+        } elseif (isset($_POST['start_time'])) {
+            $updatedValue = substr($_POST['start_time'], 0, 5); // Return HH:MM format
+        } elseif (isset($_POST['end_time'])) {
+            $updatedValue = substr($_POST['end_time'], 0, 5); // Return HH:MM format
+        } elseif (isset($_POST['lecturer_name']) || isset($_POST['lecturer_id'])) {
+            // Fetch the lecturer name
+            if (isset($_POST['lecturer_id']) && $_POST['lecturer_id']) {
+                $stmt = $pdo->prepare("SELECT lecturer_name FROM lecturers WHERE lecturer_id = ?");
+                $stmt->execute([$_POST['lecturer_id']]);
+                $lecturer = $stmt->fetch();
+                $updatedValue = $lecturer ? $lecturer['lecturer_name'] : ($_POST['lecturer_name'] ?? '');
+            } else {
+                $updatedValue = $_POST['lecturer_name'] ?? '';
+            }
+        } elseif (isset($_POST['venue_name']) || isset($_POST['venue_id'])) {
+            // Fetch the venue name
+            if (isset($_POST['venue_id']) && $_POST['venue_id']) {
+                $stmt = $pdo->prepare("SELECT venue_name FROM venues WHERE venue_id = ?");
+                $stmt->execute([$_POST['venue_id']]);
+                $venue = $stmt->fetch();
+                $updatedValue = $venue ? $venue['venue_name'] : ($_POST['venue_name'] ?? '');
+            } else {
+                $updatedValue = $_POST['venue_name'] ?? '';
+            }
+        }
+        
+        echo json_encode([
+            'success' => true, 
+            'message' => 'Session updated successfully',
+            'updated_value' => $updatedValue
+        ]);
         exit;
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
+        logError($e, 'Updating session in timetable editor');
         header('Content-Type: application/json');
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        echo json_encode(['success' => false, 'error' => getErrorMessage($e, 'Updating session', false)]);
         exit;
     }
 }
@@ -156,8 +330,9 @@ try {
         $pdo->exec("ALTER TABLE sessions ADD INDEX idx_year_level (year_level)");
         $pdo->exec("ALTER TABLE sessions ADD INDEX idx_semester (semester)");
     }
-} catch (PDOException $e) {
+} catch (Exception $e) {
     // Columns might already exist, ignore error
+    logError($e, 'Setting up sessions table columns in timetable editor');
 }
 
 // Get filter values
@@ -244,436 +419,23 @@ foreach ($programmeYearSemester as $row) {
     }
 }
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Timetable Editor - Smart Timetable</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #0a0a0a;
-            color: #ffffff;
-            min-height: 100vh;
-        }
-        .container { display: flex; min-height: 100vh; }
-        
-        /* Sidebar - Same as dashboard */
-        .sidebar {
-            width: 280px;
-            background: #0a0a0a;
-            padding: 32px 24px;
-            border-right: 1px solid rgba(255,255,255,0.08);
-            position: fixed;
-            height: 100vh;
-            overflow-y: auto;
-        }
-        .sidebar::-webkit-scrollbar { width: 6px; }
-        .sidebar::-webkit-scrollbar-track { background: transparent; }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-        
-        .sidebar-header {
-            margin-bottom: 48px;
-            padding-bottom: 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-        }
-        .sidebar-header h1 {
-            font-size: 22px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 12px;
-            letter-spacing: -0.5px;
-        }
-        .admin-console {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: rgba(255,255,255,0.6);
-            font-size: 13px;
-            margin-bottom: 8px;
-            font-weight: 500;
-        }
-        .sidebar-section {
-            margin-bottom: 32px;
-        }
-        .sidebar-section-title {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.4);
-            margin-bottom: 16px;
-            padding: 0 12px;
-            font-weight: 600;
-        }
-        .sidebar-nav a {
-            display: flex;
-            align-items: center;
-            padding: 10px 12px;
-            color: rgba(255,255,255,0.7);
-            text-decoration: none;
-            border-radius: 8px;
-            margin-bottom: 4px;
-            transition: all 0.2s ease;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        .sidebar-nav a:hover {
-            background: rgba(102, 126, 234, 0.1);
-            color: #667eea;
-        }
-        .sidebar-nav a.active {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
-            color: #667eea;
-            border-left: 3px solid #667eea;
-        }
-        .sidebar-nav a i {
-            margin-right: 12px;
-            width: 20px;
-            font-style: normal;
-            font-size: 16px;
-        }
-        
-        /* Main Content */
-        .main-content {
-            margin-left: 280px;
-            flex: 1;
-            padding: 48px;
-            background: #0a0a0a;
-        }
-        
-        .page-header {
-            margin-bottom: 32px;
-        }
-        .page-header h1 {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            letter-spacing: -1px;
-        }
-        .page-header p {
-            color: rgba(255,255,255,0.6);
-            font-size: 14px;
-        }
-        
-        /* Filters */
-        .filters {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 24px;
-            display: flex;
-            gap: 16px;
-            align-items: flex-end;
-            flex-wrap: wrap;
-        }
-        .filter-group {
-            flex: 1;
-            min-width: 200px;
-        }
-        .filter-group label {
-            display: block;
-            font-size: 12px;
-            color: rgba(255,255,255,0.5);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 600;
-        }
-        .filter-group select,
-        .filter-group input {
-            width: 100%;
-            padding: 10px 14px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 8px;
-            color: #ffffff;
-            font-size: 14px;
-        }
-        .filter-group select:focus,
-        .filter-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        .btn-apply {
-            padding: 10px 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-        .btn-apply:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
-        }
-        
-        /* Bulk Actions */
-        .bulk-actions {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 24px;
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .bulk-actions label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: rgba(255,255,255,0.7);
-            font-size: 14px;
-            cursor: pointer;
-        }
-        .bulk-actions input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-        }
-        .bulk-btn {
-            padding: 8px 16px;
-            background: rgba(102, 126, 234, 0.2);
-            border: 1px solid rgba(102, 126, 234, 0.3);
-            color: #667eea;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: all 0.3s;
-        }
-        .bulk-btn:hover {
-            background: rgba(102, 126, 234, 0.3);
-        }
-        
-        /* Table */
-        .table-container {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        thead {
-            background: rgba(102, 126, 234, 0.1);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        th {
-            padding: 16px;
-            text-align: left;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.6);
-            font-weight: 600;
-        }
-        td {
-            padding: 16px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            color: rgba(255,255,255,0.8);
-            font-size: 14px;
-        }
-        tbody tr:hover {
-            background: rgba(255,255,255,0.03);
-        }
-        .session-module {
-            font-weight: 600;
-            color: #ffffff;
-            margin-bottom: 4px;
-        }
-        .session-details {
-            font-size: 12px;
-            color: rgba(255,255,255,0.5);
-        }
-        .btn-delete {
-            padding: 6px 12px;
-            background: rgba(231, 76, 60, 0.2);
-            border: 1px solid rgba(231, 76, 60, 0.3);
-            color: #e74c3c;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 12px;
-            text-decoration: none;
-            transition: all 0.3s;
-        }
-        .btn-delete:hover {
-            background: rgba(231, 76, 60, 0.3);
-        }
-        .btn-edit {
-            padding: 6px 12px;
-            background: rgba(102, 126, 234, 0.2);
-            border: 1px solid rgba(102, 126, 234, 0.3);
-            color: #667eea;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 12px;
-            text-decoration: none;
-            transition: all 0.3s;
-        }
-        .btn-edit:hover {
-            background: rgba(102, 126, 234, 0.3);
-        }
-        
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.8);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal.active {
-            display: flex;
-        }
-        .modal-content {
-            background: #1a1a1a;
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 16px;
-            padding: 32px;
-            min-width: 400px;
-            max-width: 90%;
-        }
-        .modal-header {
-            margin-bottom: 24px;
-        }
-        .modal-header h3 {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 8px;
-        }
-        .modal-body input {
-            width: 100%;
-            padding: 12px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 8px;
-            color: #ffffff;
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
-        .modal-body input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        .modal-footer {
-            display: flex;
-            gap: 12px;
-            justify-content: flex-end;
-        }
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.3s;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        .btn-secondary {
-            background: rgba(255,255,255,0.1);
-            color: rgba(255,255,255,0.7);
-        }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <h1>SMART TIMETABLE</h1>
-                <div class="admin-console">
-                    <span>⚙️</span>
-                    <span>Admin Console</span>
-                </div>
-            </div>
-            
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">Overview</div>
-                <nav class="sidebar-nav">
-                    <a href="dashboard.php"><i>📊</i> Dashboard</a>
-                </nav>
-            </div>
-            
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">Academic Structure</div>
-                <nav class="sidebar-nav">
-                    <a href="#"><i>🏛️</i> Faculties</a>
-                    <a href="#"><i>🏫</i> Schools</a>
-                    <a href="#"><i>📜</i> Programmes</a>
-                    <a href="#"><i>📅</i> Academic Years</a>
-                </nav>
-            </div>
-            
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">People & Resources</div>
-                <nav class="sidebar-nav">
-                    <a href="students.php"><i>👥</i> Students</a>
-                    <a href="admin/lecturers.php"><i>👤</i> Lecturers</a>
-                    <a href="admin/venues.php"><i>📍</i> Venues</a>
-                </nav>
-            </div>
-            
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">Curriculum & Timetable</div>
-                <nav class="sidebar-nav">
-                    <a href="admin/modules.php"><i>📚</i> Modules</a>
-                    <a href="admin/timetable.php"><i>➕</i> Add Session</a>
-                    <a href="timetable_editor.php" class="active"><i>✏️</i> Edit Sessions</a>
-                    <a href="view_timetable.php"><i>📋</i> View Timetable</a>
-                    <a href="timetable_pdf_parser.php"><i>📤</i> Upload Timetable</a>
-                    <a href="admin/exams.php"><i>📆</i> Exam Timetables</a>
-                </nav>
-            </div>
-        </div>
-        
-        <!-- Main Content -->
-        <div class="main-content">
-            <div style="margin-bottom: 24px;">
-                <a href="dashboard.php" style="display: inline-flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; padding: 8px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; transition: all 0.2s;" onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'; this.style.borderColor='rgba(102, 126, 234, 0.3)'; this.style.color='#667eea';" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='rgba(255,255,255,0.1)'; this.style.color='rgba(255,255,255,0.7)';">
-                    <span>←</span>
-                    <span>Back to Dashboard</span>
-                </a>
-            </div>
-            <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                    <h1>Timetable Editor</h1>
-                    <p>Edit, update, and manage timetable sessions with bulk operations</p>
-                </div>
-                <button onclick="window.location.reload()" style="padding: 10px 20px; background: rgba(102, 126, 234, 0.2); border: 1px solid rgba(102, 126, 234, 0.5); border-radius: 8px; color: #667eea; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s;" onmouseover="this.style.background='rgba(102, 126, 234, 0.3)'" onmouseout="this.style.background='rgba(102, 126, 234, 0.2)'">
-                    🔄 Refresh
-                </button>
-            </div>
+<?php
+$breadcrumbs = [
+    ['label' => 'Dashboard', 'href' => 'admin/index.php'],
+    ['label' => 'Edit Sessions', 'href' => null],
+];
+$page_actions = [
+    ['label' => 'Upload Timetable', 'href' => 'timetable_pdf_parser.php'],
+    ['label' => 'View Timetable', 'href' => 'view_timetable.php'],
+];
+include 'admin/header_modern.php';
+?>
             
             <!-- Filters -->
-            <div class="filters">
-                <div class="filter-group">
-                    <label>Programme</label>
-                    <select name="programme" id="programmeFilter">
+            <div class="filters" style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.10); border-radius: 24px; padding: 24px; backdrop-filter: blur(14px); box-shadow: 0 4px 20px rgba(0,0,0,0.45); margin-bottom: 20px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                <div class="filter-group" style="min-width:260px;">
+                    <label style="font-weight:600; color: rgba(220,230,255,0.8); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Programme</label>
+                    <select name="programme" id="programmeFilter" style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
                         <option value="">All Programmes</option>
                         <?php foreach ($programmes as $programme): ?>
                             <option value="<?= htmlspecialchars($programme) ?>" <?= $programmeFilter === $programme ? 'selected' : '' ?>>
@@ -683,9 +445,9 @@ foreach ($programmeYearSemester as $row) {
                     </select>
                 </div>
                 
-                <div class="filter-group">
-                    <label>Year Level</label>
-                    <select name="year" id="yearFilter">
+                <div class="filter-group" style="min-width:180px;">
+                    <label style="font-weight:600; color: rgba(220,230,255,0.8); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Year Level <span style="color: rgba(220,230,255,0.65); font-weight: 500; text-transform: none; letter-spacing: 0;">(required for exact timetable)</span></label>
+                    <select name="year" id="yearFilter" title="Pick a year to view a precise timetable for a programme" style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
                         <option value="">All Years</option>
                         <?php 
                         // Get all unique years from all programmes
@@ -706,9 +468,9 @@ foreach ($programmeYearSemester as $row) {
                     </select>
                 </div>
                 
-                <div class="filter-group">
-                    <label>Semester</label>
-                    <select name="semester" id="semesterFilter">
+                <div class="filter-group" style="min-width:180px;">
+                    <label style="font-weight:600; color: rgba(220,230,255,0.8); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Semester</label>
+                    <select name="semester" id="semesterFilter" style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
                         <option value="">All Semesters</option>
                         <?php 
                         // Get all unique semesters
@@ -731,28 +493,126 @@ foreach ($programmeYearSemester as $row) {
                     </select>
                 </div>
                 
-                <div class="filter-group" style="flex: 2;">
-                    <label>Search</label>
-                    <input type="text" id="searchFilter" placeholder="Module, lecturer, venue..." value="<?= htmlspecialchars($searchFilter) ?>">
+                <div class="filter-group" style="flex: 2; min-width:280px;">
+                    <label style="font-weight:600; color: rgba(220,230,255,0.8); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Search</label>
+                    <input type="text" id="searchFilter" data-table-search placeholder="Module, lecturer, venue..." value="<?= htmlspecialchars($searchFilter) ?>" style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
                 </div>
-                <button type="button" class="btn-apply" onclick="applyFilters()">Apply filters</button>
+                <div class="filter-group" style="min-width:140px;">
+                    <label style="font-weight:600; color: rgba(220,230,255,0.8); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Rows</label>
+                    <select data-page-size style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                        <option>10</option>
+                        <option>25</option>
+                        <option>50</option>
+                        <option>All</option>
+                    </select>
+                </div>
+                <div style="display:flex; gap:10px; margin-left:auto;">
+                    <button type="button" class="btn-apply" onclick="applyFilters()" style="background: rgba(59, 130, 246, 0.25); color: #dce3ff; border: 1px solid rgba(59, 130, 246, 0.4); padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer;" onmouseover="this.style.background='rgba(59, 130, 246, 0.35)'; this.style.borderColor='rgba(59, 130, 246, 0.5)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.25)'; this.style.borderColor='rgba(59, 130, 246, 0.4)'">Apply filters</button>
+                        <button type="button" class="btn" style="background: rgba(59, 130, 246, 0.25); color: #dce3ff; border: 1px solid rgba(59, 130, 246, 0.4); padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);" onclick="openCreateSession()" onmouseover="this.style.background='rgba(59, 130, 246, 0.35)'; this.style.borderColor='rgba(59, 130, 246, 0.5)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.25)'; this.style.borderColor='rgba(59, 130, 246, 0.4)'">New Session</button>
+                </div>
+            </div>
+            
+            <!-- Create Session Modal -->
+            <div id="createSessionModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter: blur(8px); z-index:60; align-items:center; justify-content:center;">
+                <div class="card" style="width:100%; max-width:720px; padding:32px; border:1px solid rgba(255,255,255,0.10); background: rgba(255, 255, 255, 0.05); border-radius: 24px; backdrop-filter: blur(20px); box-shadow: 0 8px 32px rgba(0,0,0,0.6); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                        <h3 class="text-lg" style="color: #e8edff; font-size: 20px; font-weight:700; letter-spacing: -0.2px; display: flex; align-items: center; gap: 10px;">
+                            <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; color: #dce3ff;" fill="none" stroke="currentColor" stroke-width="1.7">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Create Session
+                        </h3>
+                        <button type="button" class="btn btn-cancel" onclick="closeCreateSession()" style="background: rgba(255,255,255,0.05); color: rgba(220,230,255,0.8); border: 1px solid rgba(255,255,255,0.12); padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);" onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='rgba(255,255,255,0.18)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='rgba(255,255,255,0.12)'">Close</button>
+                    </div>
+                    <form id="createSessionForm" class="grid" style="display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px;">
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label style="color: rgba(220,230,255,0.8); font-size: 13px; font-weight:600; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Module</label>
+                            <select name="module_id" required style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                                <?php foreach ($modules as $m): ?>
+                                    <option value="<?= $m['module_id'] ?>"><?= htmlspecialchars($m['module_code'] . ' — ' . $m['module_name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label style="color: rgba(220,230,255,0.8); font-size: 13px; font-weight:600; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Lecturer</label>
+                            <select name="lecturer_id" style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                                <option value="">Select…</option>
+                                <?php foreach ($lecturers as $l): ?>
+                                    <option value="<?= $l['lecturer_id'] ?>"><?= htmlspecialchars($l['lecturer_name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <input type="text" name="lecturer_name" placeholder="Or type new lecturer name" style="margin-top:8px; width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                        </div>
+                        <div class="form-group">
+                            <label style="color: rgba(220,230,255,0.8); font-size: 13px; font-weight:600; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Venue</label>
+                            <select name="venue_id" style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                                <option value="">Select…</option>
+                                <?php foreach ($venues as $v): ?>
+                                    <option value="<?= $v['venue_id'] ?>"><?= htmlspecialchars($v['venue_name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <input type="text" name="venue_name" placeholder="Or type new venue" style="margin-top:8px; width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                        </div>
+                        <div class="form-group">
+                            <label style="color: rgba(220,230,255,0.8); font-size: 13px; font-weight:600; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Day</label>
+                            <select name="day_of_week" required style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                                <?php foreach ($daysOfWeek as $d): ?>
+                                    <option><?= $d ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label style="color: rgba(220,230,255,0.8); font-size: 13px; font-weight:600; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Start</label>
+                            <input type="time" name="start_time" required style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                        </div>
+                        <div class="form-group">
+                            <label style="color: rgba(220,230,255,0.8); font-size: 13px; font-weight:600; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">End</label>
+                            <input type="time" name="end_time" required style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                        </div>
+                        <div class="form-group">
+                            <label style="color: rgba(220,230,255,0.8); font-size: 13px; font-weight:600; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Programme</label>
+                            <input type="text" name="programme" value="<?= htmlspecialchars($programmeFilter) ?>" placeholder="Optional" style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                        </div>
+                        <div class="form-group">
+                            <label style="color: rgba(220,230,255,0.8); font-size: 13px; font-weight:600; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Year Level</label>
+                            <input type="text" name="year_level" value="<?= htmlspecialchars($yearFilter) ?>" placeholder="Optional" style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                        </div>
+                        <div class="form-group">
+                            <label style="color: rgba(220,230,255,0.8); font-size: 13px; font-weight:600; margin-bottom: 8px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Semester</label>
+                            <input type="text" name="semester" value="<?= htmlspecialchars($semesterFilter) ?>" placeholder="Optional" style="width:100%; padding:10px 16px; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #e8edff; font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+                        </div>
+                        <div style="grid-column: span 2; display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
+                            <button type="button" class="btn btn-cancel" onclick="closeCreateSession()" style="background: rgba(255,255,255,0.05); color: rgba(220,230,255,0.8); border: 1px solid rgba(255,255,255,0.12); padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Cancel</button>
+                            <button type="submit" class="btn" style="background: rgba(59, 130, 246, 0.25); color: #dce3ff; border: 1px solid rgba(59, 130, 246, 0.4); padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Create</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Delete Confirm Modal -->
+            <div id="deleteConfirmModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter: blur(8px); z-index:60; align-items:center; justify-content:center;">
+                <div class="card" style="width:100%; max-width:420px; padding:28px; border:1px solid rgba(255,255,255,0.10); background: rgba(255, 255, 255, 0.05); border-radius: 24px; backdrop-filter: blur(20px); box-shadow: 0 8px 32px rgba(0,0,0,0.6); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                    <h3 class="text-lg" style="color: #e8edff; font-size: 20px; font-weight:700; letter-spacing: -0.2px; margin-bottom:12px;">Delete session?</h3>
+                    <p style="color: rgba(220,230,255,0.75); margin-bottom:20px; font-size: 14px;">This action cannot be undone.</p>
+                    <div style="display:flex; justify-content:flex-end; gap:10px;">
+                        <button type="button" class="btn btn-cancel" onclick="closeDeleteConfirm()" style="background: rgba(255,255,255,0.05); color: rgba(220,230,255,0.8); border: 1px solid rgba(255,255,255,0.12); padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Cancel</button>
+                        <button id="deleteConfirmActionBtn" type="button" class="btn" style="background:rgba(239, 68, 68, 0.25); color:#fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Delete</button>
+                    </div>
+                </div>
             </div>
             
             <!-- Bulk Actions -->
-            <div class="bulk-actions">
-                <label>
-                    <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+            <div class="content-card toolbar" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.10); border-radius: 16px; padding: 16px 20px; backdrop-filter: blur(14px); box-shadow: 0 2px 8px rgba(0,0,0,0.2); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                <label style="display: flex; align-items: center; gap: 10px; color: rgba(220,230,255,0.8); font-size: 14px; font-weight: 600; cursor: pointer;">
+                    <input type="checkbox" id="selectAll" onchange="toggleSelectAll()" style="width: 18px; height: 18px; cursor: pointer;">
                     Select all sessions in view
                 </label>
-                <button type="button" class="bulk-btn" onclick="openBulkLecturerModal()">New lecturer</button>
-                <button type="button" class="bulk-btn" onclick="openBulkVenueModal()">New venue</button>
-                <button type="button" class="bulk-btn" onclick="openBulkLecturerModal()">Bulk venue</button>
-                <button type="button" class="bulk-btn" onclick="openBulkLecturerModal()">Bulk lecturer</button>
             </div>
             
             <!-- Sessions Table -->
-            <div class="table-container">
-                <table>
+            <div class="table-container card">
+                <table id="editorTable" data-table class="table compact">
                     <thead>
                         <tr>
                             <th></th>
@@ -762,14 +622,23 @@ foreach ($programmeYearSemester as $row) {
                             <th>Day</th>
                             <th>Start</th>
                             <th>End</th>
-                            <th>Actions</th>
+                            <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($sessions)): ?>
                         <tr>
-                            <td colspan="8" style="text-align: center; padding: 40px; color: rgba(255,255,255,0.5);">
-                                No sessions found. Upload a timetable file or add sessions manually.
+                            <td colspan="8" style="text-align: center; padding: 60px 40px; color: rgba(220,230,255,0.65); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 48px; height: 48px; color: rgba(220,230,255,0.4); margin-bottom: 8px;">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                                    </svg>
+                                    <div style="font-size: 15px; font-weight: 600; color: rgba(220,230,255,0.8);">No sessions found</div>
+                                    <div style="font-size: 13px; color: rgba(220,230,255,0.65);">Upload a timetable file or add sessions manually.</div>
+                                </div>
                             </td>
                         </tr>
                         <?php else: ?>
@@ -778,9 +647,9 @@ foreach ($programmeYearSemester as $row) {
                             <td>
                                 <input type="checkbox" class="session-checkbox" value="<?= $session['session_id'] ?>">
                             </td>
-                            <td>
-                                <div class="session-module"><?= htmlspecialchars($session['module_code'] ?? '-') ?></div>
-                                <div class="session-details"><?= htmlspecialchars($session['module_name'] ?? '') ?></div>
+                            <td style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                                <div class="session-module" style="color: #e8edff; font-weight: 600; font-size: 14px; margin-bottom: 4px;"><?= htmlspecialchars($session['module_code'] ?? '-') ?></div>
+                                <div class="session-details" style="color: rgba(220,230,255,0.65); font-size: 12px;"><?= htmlspecialchars($session['module_name'] ?? '') ?></div>
                             </td>
                             <td>
                                 <span class="editable-field" 
@@ -788,9 +657,9 @@ foreach ($programmeYearSemester as $row) {
                                       data-session-id="<?= $session['session_id'] ?>"
                                       data-lecturer-id="<?= $session['lecturer_id'] ?? '' ?>"
                                       data-current-value="<?= htmlspecialchars($session['lecturer_name'] ?? '-') ?>"
-                                      style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: inline-block; min-width: 100px;"
-                                      onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'"
-                                      onmouseout="this.style.background='transparent'">
+                                      style="cursor: pointer; padding: 6px 10px; border-radius: 8px; display: inline-block; min-width: 100px; color: rgba(220,230,255,0.9); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.2s ease;"
+                                      onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.border='1px solid rgba(255,255,255,0.12)'"
+                                      onmouseout="this.style.background='transparent'; this.style.border='none'">
                                     <?= htmlspecialchars($session['lecturer_name'] ?? '-') ?>
                                 </span>
                             </td>
@@ -800,9 +669,9 @@ foreach ($programmeYearSemester as $row) {
                                       data-session-id="<?= $session['session_id'] ?>"
                                       data-venue-id="<?= $session['venue_id'] ?? '' ?>"
                                       data-current-value="<?= htmlspecialchars($session['venue_name'] ?? '-') ?>"
-                                      style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: inline-block; min-width: 100px;"
-                                      onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'"
-                                      onmouseout="this.style.background='transparent'">
+                                      style="cursor: pointer; padding: 6px 10px; border-radius: 8px; display: inline-block; min-width: 100px; color: rgba(220,230,255,0.9); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.2s ease;"
+                                      onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.border='1px solid rgba(255,255,255,0.12)'"
+                                      onmouseout="this.style.background='transparent'; this.style.border='none'">
                                     <?= htmlspecialchars($session['venue_name'] ?? '-') ?>
                                 </span>
                             </td>
@@ -811,9 +680,9 @@ foreach ($programmeYearSemester as $row) {
                                       data-field="day" 
                                       data-session-id="<?= $session['session_id'] ?>"
                                       data-current-value="<?= htmlspecialchars($session['day_of_week']) ?>"
-                                      style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: inline-block; min-width: 80px;"
-                                      onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'"
-                                      onmouseout="this.style.background='transparent'">
+                                      style="cursor: pointer; padding: 6px 10px; border-radius: 8px; display: inline-block; min-width: 80px; color: rgba(220,230,255,0.9); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.2s ease;"
+                                      onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.border='1px solid rgba(255,255,255,0.12)'"
+                                      onmouseout="this.style.background='transparent'; this.style.border='none'">
                                     <?= htmlspecialchars($session['day_of_week']) ?>
                                 </span>
                             </td>
@@ -822,9 +691,9 @@ foreach ($programmeYearSemester as $row) {
                                       data-field="start_time" 
                                       data-session-id="<?= $session['session_id'] ?>"
                                       data-current-value="<?= htmlspecialchars(substr($session['start_time'], 0, 5)) ?>"
-                                      style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: inline-block; min-width: 60px;"
-                                      onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'"
-                                      onmouseout="this.style.background='transparent'">
+                                      style="cursor: pointer; padding: 6px 10px; border-radius: 8px; display: inline-block; min-width: 60px; color: rgba(220,230,255,0.9); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.2s ease;"
+                                      onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.border='1px solid rgba(255,255,255,0.12)'"
+                                      onmouseout="this.style.background='transparent'; this.style.border='none'">
                                     <?= htmlspecialchars(substr($session['start_time'], 0, 5)) ?>
                                 </span>
                             </td>
@@ -833,14 +702,16 @@ foreach ($programmeYearSemester as $row) {
                                       data-field="end_time" 
                                       data-session-id="<?= $session['session_id'] ?>"
                                       data-current-value="<?= htmlspecialchars(substr($session['end_time'], 0, 5)) ?>"
-                                      style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: inline-block; min-width: 60px;"
-                                      onmouseover="this.style.background='rgba(102, 126, 234, 0.1)'"
-                                      onmouseout="this.style.background='transparent'">
+                                      style="cursor: pointer; padding: 6px 10px; border-radius: 8px; display: inline-block; min-width: 60px; color: rgba(220,230,255,0.9); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: all 0.2s ease;"
+                                      onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.border='1px solid rgba(255,255,255,0.12)'"
+                                      onmouseout="this.style.background='transparent'; this.style.border='none'">
                                     <?= htmlspecialchars(substr($session['end_time'], 0, 5)) ?>
                                 </span>
                             </td>
                             <td>
-                                <a href="?delete=1&id=<?= $session['session_id'] ?>" class="btn-delete" onclick="return confirm('Are you sure?')">🗑️ Delete</a>
+                                <a href="?delete=1&id=<?= $session['session_id'] ?>" class="icon-btn" title="Delete session" aria-label="Delete session" onclick="return openDeleteConfirm(event, <?= (int)$session['session_id'] ?>)">
+                                    <svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+                                </a>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -848,80 +719,133 @@ foreach ($programmeYearSemester as $row) {
                     </tbody>
                 </table>
             </div>
-        </div>
-    </div>
-    
-    <!-- Edit Lecturer Modal -->
-    <div class="modal" id="editLecturerModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>localhost says</h3>
-                <p>Update Lecturer name</p>
+            <div class="content-card" style="display:flex; justify-content:flex-end;">
+                <div data-pagination></div>
             </div>
-            <form method="POST" id="lecturerForm">
-                <div class="modal-body">
-                    <input type="hidden" name="lecturer_id" id="lecturerId">
-                    <input type="text" name="lecturer_name" id="lecturerName" placeholder="Lecturer name" required>
-                </div>
-                <div class="modal-footer">
-                    <button type="submit" name="update_lecturer_name" class="btn btn-primary">OK</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeEditLecturerModal()">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
+<?php /* footer moved to end to include modals before closing body */ ?>
     
-    <!-- Bulk Lecturer Modal -->
-    <div class="modal" id="bulkLecturerModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Bulk Update Lecturer</h3>
-                <p>Select lecturer for selected sessions</p>
-            </div>
-            <form method="POST" id="bulkLecturerForm">
-                <div class="modal-body">
-                    <input type="hidden" name="session_ids" id="bulkSessionIds">
-                    <select name="lecturer_id" id="bulkLecturerId" required style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #ffffff; font-size: 14px;">
-                        <option value="">Select Lecturer</option>
-                        <?php foreach ($lecturers as $lecturer): ?>
-                        <option value="<?= $lecturer['lecturer_id'] ?>"><?= htmlspecialchars($lecturer['lecturer_name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="modal-footer">
-                    <button type="submit" name="bulk_lecturer" class="btn btn-primary">Update</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeBulkLecturerModal()">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    
-    <!-- Bulk Venue Modal -->
-    <div class="modal" id="bulkVenueModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Bulk Update Venue</h3>
-                <p>Select venue for selected sessions</p>
-            </div>
-            <form method="POST" id="bulkVenueForm">
-                <div class="modal-body">
-                    <input type="hidden" name="session_ids" id="bulkVenueSessionIds">
-                    <select name="venue_id" id="bulkVenueId" required style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #ffffff; font-size: 14px;">
-                        <option value="">Select Venue</option>
-                        <?php foreach ($venues as $venue): ?>
-                        <option value="<?= $venue['venue_id'] ?>"><?= htmlspecialchars($venue['venue_name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="modal-footer">
-                    <button type="submit" name="bulk_venue" class="btn btn-primary">Update</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeBulkVenueModal()">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <!-- Modals removed as per request -->
     
     <script>
+        // Non-blocking notification system
+        function showNotification(message, type = 'info') {
+            // Remove any existing notifications
+            const existing = document.querySelector('.inline-notification');
+            if (existing) {
+                existing.remove();
+            }
+            
+            const notification = document.createElement('div');
+            notification.className = 'inline-notification';
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 16px 20px;
+                border-radius: 12px;
+                backdrop-filter: blur(14px);
+                box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+                z-index: 10000;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                font-size: 14px;
+                font-weight: 500;
+                max-width: 400px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                animation: slideIn 0.3s ease-out;
+            `;
+            
+            // Set colors based on type
+            if (type === 'error') {
+                notification.style.background = 'rgba(239, 68, 68, 0.15)';
+                notification.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                notification.style.color = '#fca5a5';
+            } else if (type === 'success') {
+                notification.style.background = 'rgba(16, 185, 129, 0.15)';
+                notification.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                notification.style.color = '#6ee7b7';
+            } else {
+                notification.style.background = 'rgba(59, 130, 246, 0.15)';
+                notification.style.border = '1px solid rgba(59, 130, 246, 0.3)';
+                notification.style.color = '#93c5fd';
+            }
+            
+            // Add icon
+            const icon = document.createElement('div');
+            icon.innerHTML = type === 'error' ? '✕' : (type === 'success' ? '✓' : 'ℹ');
+            icon.style.cssText = 'font-size: 18px; flex-shrink: 0;';
+            notification.appendChild(icon);
+            
+            // Add message
+            const messageEl = document.createElement('div');
+            messageEl.textContent = message;
+            messageEl.style.flex = '1';
+            notification.appendChild(messageEl);
+            
+            // Add close button
+            const closeBtn = document.createElement('button');
+            closeBtn.innerHTML = '×';
+            closeBtn.style.cssText = `
+                background: transparent;
+                border: none;
+                color: inherit;
+                font-size: 20px;
+                cursor: pointer;
+                padding: 0;
+                width: 24px;
+                height: 24px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                opacity: 0.7;
+                transition: opacity 0.2s;
+            `;
+            closeBtn.onmouseover = () => closeBtn.style.opacity = '1';
+            closeBtn.onmouseout = () => closeBtn.style.opacity = '0.7';
+            closeBtn.onclick = () => notification.remove();
+            notification.appendChild(closeBtn);
+            
+            document.body.appendChild(notification);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.style.animation = 'slideOut 0.3s ease-in';
+                    setTimeout(() => notification.remove(), 300);
+                }
+            }, 5000);
+        }
+        
+        // Add CSS animations
+        if (!document.getElementById('notification-styles')) {
+            const style = document.createElement('style');
+            style.id = 'notification-styles';
+            style.textContent = `
+                @keyframes slideIn {
+                    from {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+                @keyframes slideOut {
+                    from {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                    to {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
         // Functions that need to be globally accessible (called from inline handlers)
         function toggleSelectAll() {
             const selectAll = document.getElementById('selectAll');
@@ -929,39 +853,29 @@ foreach ($programmeYearSemester as $row) {
             checkboxes.forEach(cb => cb.checked = selectAll.checked);
         }
         
-        function openBulkLecturerModal() {
-            const selectedIds = Array.from(document.querySelectorAll('.session-checkbox:checked')).map(cb => cb.value);
-            if (selectedIds.length === 0) {
-                alert('Please select at least one session');
-                return;
-            }
-            document.getElementById('bulkSessionIds').value = JSON.stringify(selectedIds);
-            document.getElementById('bulkLecturerModal').classList.add('active');
-        }
-        
-        function closeBulkLecturerModal() {
-            document.getElementById('bulkLecturerModal').classList.remove('active');
-        }
-        
-        function openBulkVenueModal() {
-            const selectedIds = Array.from(document.querySelectorAll('.session-checkbox:checked')).map(cb => cb.value);
-            if (selectedIds.length === 0) {
-                alert('Please select at least one session');
-                return;
-            }
-            document.getElementById('bulkVenueSessionIds').value = JSON.stringify(selectedIds);
-            document.getElementById('bulkVenueModal').classList.add('active');
-        }
-        
-        function closeBulkVenueModal() {
-            document.getElementById('bulkVenueModal').classList.remove('active');
-        }
+        // Bulk modals removed
         
         function applyFilters() {
             const programme = document.getElementById('programmeFilter').value;
             const year = document.getElementById('yearFilter').value;
             const semester = document.getElementById('semesterFilter').value;
             const search = document.getElementById('searchFilter').value;
+            
+            // If a programme is selected but no year selected, ask for a year to get an exact timetable
+            if (programme && !year) {
+                const yearEl = document.getElementById('yearFilter');
+                // Visual nudge
+                yearEl.style.borderColor = '#e74c3c';
+                yearEl.focus();
+                // Subtle inline message (temporary)
+                const oldTitle = yearEl.title;
+                yearEl.title = 'Select a year to view the exact timetable for the selected programme';
+                setTimeout(() => {
+                    yearEl.style.borderColor = '';
+                    yearEl.title = oldTitle || 'Pick a year to view a precise timetable for a programme';
+                }, 1800);
+                return; // stop until user picks a year
+            }
             
             const params = new URLSearchParams();
             if (programme) params.append('programme', programme);
@@ -972,8 +886,88 @@ foreach ($programmeYearSemester as $row) {
             window.location.href = 'timetable_editor.php' + (params.toString() ? '?' + params.toString() : '');
         }
         
+        // Create Session modal helpers
+        function openCreateSession() {
+            const modal = document.getElementById('createSessionModal');
+            if (modal) modal.style.display = 'flex';
+        }
+        function closeCreateSession() {
+            const modal = document.getElementById('createSessionModal');
+            if (modal) modal.style.display = 'none';
+        }
+        
+        // Delete confirm modal helpers
+        let pendingDeleteUrl = null;
+        function openDeleteConfirm(e, sessionId) {
+            e.preventDefault();
+            const modal = document.getElementById('deleteConfirmModal');
+            pendingDeleteUrl = '?delete=1&id=' + encodeURIComponent(sessionId);
+            if (modal) modal.style.display = 'flex';
+            return false;
+        }
+        function closeDeleteConfirm() {
+            const modal = document.getElementById('deleteConfirmModal');
+            if (modal) modal.style.display = 'none';
+            pendingDeleteUrl = null;
+        }
+        
         // Wait for DOM to be fully loaded
         document.addEventListener('DOMContentLoaded', function() {
+        // Hook delete confirm button
+        const deleteBtn = document.getElementById('deleteConfirmActionBtn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', function() {
+                if (pendingDeleteUrl) {
+                    const base = pendingDeleteUrl.indexOf('?') !== -1 ? pendingDeleteUrl + '&' : pendingDeleteUrl + '?';
+                    window.location.href = base + 'notice=session_deleted';
+                } else {
+                    closeDeleteConfirm();
+                }
+            });
+        }
+        // ESC to close modal
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeCreateSession();
+            }
+        });
+        
+        // Create session form submit
+        const createForm = document.getElementById('createSessionForm');
+        if (createForm) {
+            createForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const formData = new FormData(createForm);
+                formData.append('create_session', '1');
+                
+                try {
+                    const res = await fetch('timetable_editor.php', { method: 'POST', body: formData, cache: 'no-cache', headers: { 'Accept': 'application/json' } });
+                    // If session expired and server redirects to login, navigate there
+                    if (res.redirected || (res.url && res.url.indexOf('login.php') !== -1)) {
+                        window.location.href = res.url;
+                        return;
+                    }
+                    let data;
+                    const contentType = res.headers.get('content-type') || '';
+                    if (contentType.includes('application/json')) {
+                        data = await res.json();
+                    } else {
+                        const text = await res.text();
+                        throw new Error(text.slice(0, 400));
+                    }
+                    if (data && data.success) {
+                        // Preserve filters
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const base = 'timetable_editor.php' + (urlParams.toString() ? '?' + urlParams.toString() + '&' : '?');
+                        window.location.href = base + 'notice=session_created';
+                    } else {
+                        showNotification('Failed to create session: ' + (data.error || 'Unknown error'), 'error');
+                    }
+                } catch (err) {
+                    showNotification('Failed to create session: ' + err.message, 'error');
+                }
+            });
+        }
         
         // Filter data from PHP
         <?php
@@ -1156,28 +1150,51 @@ foreach ($programmeYearSemester as $row) {
             });
         }
         
-        // Handle form submission for bulk operations
-        document.getElementById('bulkLecturerForm').addEventListener('submit', function(e) {
-            const sessionIds = JSON.parse(document.getElementById('bulkSessionIds').value);
-            sessionIds.forEach(id => {
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'session_ids[]';
-                input.value = id;
-                this.appendChild(input);
-            });
+        // Initialize compact table pagination/sort/search using shared UI helper
+        if (typeof UI !== 'undefined') {
+            try {
+                UI.initTable(
+                    document.getElementById('editorTable'),
+                    {
+                        searchSelector: '#searchFilter',
+                        perPageSelector: '[data-page-size]',
+                        paginationSelector: '[data-pagination]'
+                    }
+                );
+            } catch (e) {
+                console.warn('Table init warning:', e);
+            }
+        } else {
+            // Lightweight client-side search fallback
+            const table = document.getElementById('editorTable');
+            const searchInput = document.getElementById('searchFilter');
+            if (table && searchInput) {
+                const rows = Array.from(table.querySelectorAll('tbody tr'));
+                const filterRows = () => {
+                    const q = searchInput.value.trim().toLowerCase();
+                    rows.forEach(row => {
+                        if (!q) {
+                            row.style.display = '';
+                            return;
+                        }
+                        const text = row.textContent.toLowerCase();
+                        row.style.display = text.indexOf(q) !== -1 ? '' : 'none';
+                    });
+                };
+                searchInput.addEventListener('input', filterRows);
+            }
+        }
+        // Shortcut: press '/' to focus search
+        document.addEventListener('keydown', function(e) {
+            if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                const input = document.getElementById('searchFilter');
+                if (input) input.focus();
+            }
         });
         
-        document.getElementById('bulkVenueForm').addEventListener('submit', function(e) {
-            const sessionIds = JSON.parse(document.getElementById('bulkVenueSessionIds').value);
-            sessionIds.forEach(id => {
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'session_ids[]';
-                input.value = id;
-                this.appendChild(input);
-            });
-        });
+        // Handle form submission for bulk operations
+        // Removed bulk form listeners (no longer present)
         
         // Inline editing functionality
         const daysOfWeek = <?= json_encode($daysOfWeek ?? ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
@@ -1186,7 +1203,9 @@ foreach ($programmeYearSemester as $row) {
         
         // Make sure editable fields are clickable
         const editableFields = document.querySelectorAll('.editable-field');
-        console.log('Found', editableFields.length, 'editable fields');
+        if (editableFields.length > 0) {
+            console.log('Found', editableFields.length, 'editable fields');
+        }
         
         editableFields.forEach(field => {
             field.addEventListener('click', function(e) {
@@ -1196,48 +1215,52 @@ foreach ($programmeYearSemester as $row) {
                 const sessionId = this.dataset.sessionId;
                 const currentValue = this.dataset.currentValue;
                 const originalHTML = this.innerHTML;
+                const originalStyle = this.getAttribute('style') || '';
+                
+                // Store original style for restoration
+                this.setAttribute('data-original-style', originalStyle);
                 
                 // Create input based on field type
                 let input;
                 if (fieldType === 'lecturer') {
-                    input = document.createElement('select');
-                    input.style.cssText = 'padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid #667eea; border-radius: 4px; color: #fff; width: 100%;';
-                    input.innerHTML = '<option value="">-</option>';
-                    Object.entries(lecturersList).forEach(([id, name]) => {
-                        const option = document.createElement('option');
-                        option.value = id;
-                        option.textContent = name;
-                        if (name === currentValue || currentValue === '-') {
-                            option.selected = true;
-                        }
-                        input.appendChild(option);
-                    });
-                    // Add option to type new lecturer
-                    const newOption = document.createElement('option');
-                    newOption.value = '__NEW__';
-                    newOption.textContent = '+ Add New Lecturer';
-                    input.appendChild(newOption);
+                    // Use a text input with datalist so user can pick existing or type new
+                    input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = currentValue !== '-' ? currentValue : '';
+                    input.setAttribute('list', 'lecturers-datalist');
+                    input.style.cssText = 'padding: 8px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: #e8edff; width: 100%; font-size: 13px; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);';
+                    // Build datalist if not present
+                    if (!document.getElementById('lecturers-datalist')) {
+                        const dl = document.createElement('datalist');
+                        dl.id = 'lecturers-datalist';
+                        Object.entries(lecturersList).forEach(([id, name]) => {
+                            const option = document.createElement('option');
+                            option.value = name;
+                            dl.appendChild(option);
+                        });
+                        document.body.appendChild(dl);
+                    }
                 } else if (fieldType === 'venue') {
-                    input = document.createElement('select');
-                    input.style.cssText = 'padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid #667eea; border-radius: 4px; color: #fff; width: 100%;';
-                    input.innerHTML = '<option value="">-</option>';
-                    Object.entries(venuesList).forEach(([id, name]) => {
-                        const option = document.createElement('option');
-                        option.value = id;
-                        option.textContent = name;
-                        if (name === currentValue || currentValue === '-') {
-                            option.selected = true;
-                        }
-                        input.appendChild(option);
-                    });
-                    // Add option to type new venue
-                    const newOption = document.createElement('option');
-                    newOption.value = '__NEW__';
-                    newOption.textContent = '+ Add New Venue';
-                    input.appendChild(newOption);
+                    // Use a text input with datalist so user can pick existing or type new
+                    input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = currentValue !== '-' ? currentValue : '';
+                    input.setAttribute('list', 'venues-datalist');
+                    input.style.cssText = 'padding: 8px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: #e8edff; width: 100%; font-size: 13px; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);';
+                    // Build datalist if not present
+                    if (!document.getElementById('venues-datalist')) {
+                        const dl = document.createElement('datalist');
+                        dl.id = 'venues-datalist';
+                        Object.entries(venuesList).forEach(([id, name]) => {
+                            const option = document.createElement('option');
+                            option.value = name;
+                            dl.appendChild(option);
+                        });
+                        document.body.appendChild(dl);
+                    }
                 } else if (fieldType === 'day') {
                     input = document.createElement('select');
-                    input.style.cssText = 'padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid #667eea; border-radius: 4px; color: #fff; width: 100%;';
+                    input.style.cssText = 'padding: 8px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: #e8edff; width: 100%; font-size: 13px; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);';
                     daysOfWeek.forEach(day => {
                         const option = document.createElement('option');
                         option.value = day;
@@ -1249,7 +1272,7 @@ foreach ($programmeYearSemester as $row) {
                     input = document.createElement('input');
                     input.type = 'time';
                     input.value = currentValue;
-                    input.style.cssText = 'padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid #667eea; border-radius: 4px; color: #fff; width: 100%;';
+                    input.style.cssText = 'padding: 8px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: #e8edff; width: 100%; font-size: 13px; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);';
                 }
                 
                 // Store reference to field for escape handler
@@ -1261,13 +1284,32 @@ foreach ($programmeYearSemester as $row) {
                 
                 // Prevent immediate blur when clicking on select/input
                 let isSaving = false;
+                const initialValue = currentValue; // used to detect real changes for selects
+                
+                // Safety timeout: if field is stuck in editing state for more than 30 seconds, reset it
+                const safetyTimeout = setTimeout(() => {
+                    if (fieldElement.querySelector('input, select')) {
+                        console.warn('Field editing timeout - resetting field');
+                        isSaving = false;
+                        fieldElement.innerHTML = originalHTML;
+                        fieldElement.className = 'editable-field';
+                        const originalStyle = fieldElement.getAttribute('data-original-style') || '';
+                        if (originalStyle) {
+                            fieldElement.setAttribute('style', originalStyle);
+                        }
+                        fieldElement.removeAttribute('data-original-style');
+                    }
+                }, 30000);
+                
+                // Clear safety timeout when field is successfully saved or cancelled
+                const clearSafetyTimeout = () => {
+                    if (safetyTimeout) clearTimeout(safetyTimeout);
+                };
                 
                 // Focus after a small delay to ensure it's clickable
                 setTimeout(() => {
                     input.focus();
-                    if (input.tagName === 'SELECT') {
-                        input.click(); // Open dropdown for select elements
-                    }
+                    // Do not auto-open selects; it can cause unintended selection of first option
                 }, 10);
                 
                 // Handle save on blur or Enter
@@ -1281,30 +1323,23 @@ foreach ($programmeYearSemester as $row) {
                     let venueName = '';
                     
                     if (fieldType === 'lecturer') {
-                        if (value === '__NEW__') {
-                            lecturerName = prompt('Enter new lecturer name:');
-                            if (!lecturerName) {
-                                isSaving = false;
-                                fieldElement.innerHTML = originalHTML;
-                                return;
-                            }
+                        // If the typed value matches an existing lecturer name, use the ID; otherwise create new by name
+                        const matchId = Object.entries(lecturersList).find(([id, name]) => name === value)?.[0] || '';
+                        if (matchId) {
+                            lecturerId = matchId;
+                        } else if (value && value !== '-') {
+                            lecturerName = value.trim();
                             lecturerId = '';
-                        } else if (value) {
-                            lecturerId = value;
                         } else {
                             lecturerId = '';
                         }
                     } else if (fieldType === 'venue') {
-                        if (value === '__NEW__') {
-                            venueName = prompt('Enter new venue name:');
-                            if (!venueName) {
-                                isSaving = false;
-                                fieldElement.innerHTML = originalHTML;
-                                return;
-                            }
+                        const matchId = Object.entries(venuesList).find(([id, name]) => name === value)?.[0] || '';
+                        if (matchId) {
+                            venueId = matchId;
+                        } else if (value && value !== '-') {
+                            venueName = value.trim();
                             venueId = '';
-                        } else if (value) {
-                            venueId = value;
                         } else {
                             venueId = '';
                         }
@@ -1321,7 +1356,14 @@ foreach ($programmeYearSemester as $row) {
                         if (venueId) formData.append('venue_id', venueId);
                         if (venueName) formData.append('venue_name', venueName);
                     } else if (fieldType === 'day') {
-                        formData.append('day_of_week', value);
+                        // Validate against allowed days to prevent accidental defaulting
+                        const validDays = new Set(daysOfWeek);
+                        let v = (value || '').toString().trim();
+                        if (!validDays.has(v)) {
+                            const candidate = daysOfWeek.find(d => d.toLowerCase() === v.toLowerCase());
+                            v = candidate || v;
+                        }
+                        formData.append('day_of_week', v);
                     } else if (fieldType === 'start_time') {
                         formData.append('start_time', value + ':00');
                     } else if (fieldType === 'end_time') {
@@ -1333,33 +1375,93 @@ foreach ($programmeYearSemester as $row) {
                         body: formData,
                         cache: 'no-cache'
                     })
-                    .then(response => {
+                    .then(async (response) => {
                         if (!response.ok) {
-                            throw new Error('Network response was not ok');
+                            const text = await response.text().catch(() => '');
+                            throw new Error(text || 'Network response was not ok');
                         }
                         return response.json();
                     })
                     .then(data => {
+                        clearSafetyTimeout(); // Clear safety timeout on success
                         if (data.success) {
-                            // Immediately reload page to show updated data with current filters preserved
-                            const urlParams = new URLSearchParams(window.location.search);
-                            window.location.href = 'timetable_editor.php' + (urlParams.toString() ? '?' + urlParams.toString() : '');
+                            // Update the field in place without reloading the page
+                            const newValue = data.updated_value || value;
+                            isSaving = false;
+                            
+                            // Restore the field with the new value
+                            fieldElement.innerHTML = newValue;
+                            fieldElement.setAttribute('data-current-value', newValue);
+                            
+                            // Remove the input/select and restore the span styling
+                            fieldElement.className = 'editable-field';
+                            const originalStyle = fieldElement.getAttribute('data-original-style') || '';
+                            
+                            // Restore original style and attributes
+                            if (originalStyle) {
+                                fieldElement.setAttribute('style', originalStyle);
+                            }
+                            
+                            // Restore hover handlers based on field type
+                            const minWidth = fieldType === 'day' ? '80px' : (fieldType === 'start_time' || fieldType === 'end_time' ? '60px' : '100px');
+                            fieldElement.setAttribute('onmouseover', "this.style.background='rgba(255,255,255,0.08)'; this.style.border='1px solid rgba(255,255,255,0.12)'");
+                            fieldElement.setAttribute('onmouseout', "this.style.background='transparent'; this.style.border='none'");
+                            
+                            // Remove the data-original-style attribute
+                            fieldElement.removeAttribute('data-original-style');
+                            
+                            // The click handler is already attached via event delegation, so no need to re-attach
                         } else {
+                            // Reset state first before showing error
                             isSaving = false;
                             fieldElement.innerHTML = originalHTML;
-                            alert('Error updating field: ' + (data.error || 'Unknown error'));
+                            fieldElement.className = 'editable-field';
+                            const originalStyle = fieldElement.getAttribute('data-original-style') || '';
+                            if (originalStyle) {
+                                fieldElement.setAttribute('style', originalStyle);
+                            }
+                            fieldElement.removeAttribute('data-original-style');
+                            
+                            // Show non-blocking error notification
+                            showNotification('Error updating field: ' + (data.error || 'Unknown error'), 'error');
                         }
                     })
                     .catch(error => {
+                        clearSafetyTimeout(); // Clear safety timeout on error
                         console.error('Error:', error);
+                        // Reset state first before showing error
                         isSaving = false;
                         fieldElement.innerHTML = originalHTML;
-                        alert('Error updating field: ' + error.message);
+                        fieldElement.className = 'editable-field';
+                        const originalStyle = fieldElement.getAttribute('data-original-style') || '';
+                        if (originalStyle) {
+                            fieldElement.setAttribute('style', originalStyle);
+                        }
+                        fieldElement.removeAttribute('data-original-style');
+                        
+                        // Show non-blocking error notification
+                        showNotification('Error updating field: ' + error.message, 'error');
                     });
                 };
                 
-                // For select elements, don't auto-save - require explicit save
+                // For select elements, support change and blur saves
                 if (input.tagName === 'SELECT') {
+                    // Only save when the user actually picks a different value
+                    input.addEventListener('change', function(e) {
+                        e.stopPropagation();
+                        const newVal = input.value;
+                        if (!isSaving && newVal !== initialValue) {
+                            saveField();
+                        }
+                    });
+                    // Also save on blur if changed
+                    input.addEventListener('blur', function() {
+                        setTimeout(() => {
+                            if (!isSaving && input.value !== initialValue) {
+                                saveField();
+                            }
+                        }, 150);
+                    });
                     // Add a save button for selects
                     const saveBtn = document.createElement('button');
                     saveBtn.textContent = '✓ Save';
@@ -1377,12 +1479,19 @@ foreach ($programmeYearSemester as $row) {
                     // Add cancel button
                     const cancelBtn = document.createElement('button');
                     cancelBtn.textContent = '✕';
-                    cancelBtn.style.cssText = 'margin-left: 4px; padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: white; cursor: pointer; font-size: 12px;';
+                    cancelBtn.style.cssText = 'margin-left: 8px; padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: rgba(220,230,255,0.8); cursor: pointer; font-size: 12px; font-weight: 600; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);';
                     cancelBtn.onclick = function(e) {
                         e.stopPropagation();
                         e.preventDefault();
+                        clearSafetyTimeout(); // Clear safety timeout when cancelled
                         isSaving = false;
                         fieldElement.innerHTML = originalHTML;
+                        fieldElement.className = 'editable-field';
+                        const originalStyle = fieldElement.getAttribute('data-original-style') || '';
+                        if (originalStyle) {
+                            fieldElement.setAttribute('style', originalStyle);
+                        }
+                        fieldElement.removeAttribute('data-original-style');
                         return false;
                     };
                     fieldElement.appendChild(cancelBtn);
@@ -1395,19 +1504,91 @@ foreach ($programmeYearSemester as $row) {
                                 saveField();
                             }
                         } else if (e.key === 'Escape') {
+                            clearSafetyTimeout(); // Clear safety timeout when escaped
                             isSaving = false;
                             fieldElement.innerHTML = originalHTML;
+                            fieldElement.className = 'editable-field';
+                            const originalStyle = fieldElement.getAttribute('data-original-style') || '';
+                            if (originalStyle) {
+                                fieldElement.setAttribute('style', originalStyle);
+                            }
+                            fieldElement.removeAttribute('data-original-style');
                         }
                     });
                 } else {
-                    // For input elements, save on blur
-                    input.addEventListener('blur', function() {
-                        setTimeout(() => {
+                    // For input elements, show Save/Cancel and also support blur/Enter
+                    const saveBtn = document.createElement('button');
+                    saveBtn.textContent = '✓ Save';
+                    saveBtn.style.cssText = 'margin-left: 4px; padding: 4px 12px; background: #667eea; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 12px; font-weight: 600;';
+                    saveBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        if (!isSaving) {
+                            saveField();
+                        }
+                        return false;
+                    };
+                    fieldElement.appendChild(saveBtn);
+                    
+                    const cancelBtn = document.createElement('button');
+                    cancelBtn.textContent = '✕';
+                    cancelBtn.style.cssText = 'margin-left: 8px; padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: rgba(220,230,255,0.8); cursor: pointer; font-size: 12px; font-weight: 600; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);';
+                    cancelBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        clearSafetyTimeout(); // Clear safety timeout when cancelled
+                        isSaving = false;
+                        fieldElement.innerHTML = originalHTML;
+                        fieldElement.className = 'editable-field';
+                        const originalStyle = fieldElement.getAttribute('data-original-style') || '';
+                        if (originalStyle) {
+                            fieldElement.setAttribute('style', originalStyle);
+                        }
+                        fieldElement.removeAttribute('data-original-style');
+                        return false;
+                    };
+                    fieldElement.appendChild(cancelBtn);
+                    
+                    // For select elements, use 'change' event to save immediately when selection is made
+                    if (input.tagName === 'SELECT') {
+                        let selectBlurTimeout = null;
+                        input.addEventListener('change', function() {
+                            // Clear any pending blur timeout
+                            if (selectBlurTimeout) {
+                                clearTimeout(selectBlurTimeout);
+                                selectBlurTimeout = null;
+                            }
+                            // Save immediately when selection changes
                             if (!isSaving) {
                                 saveField();
                             }
-                        }, 200);
-                    });
+                        });
+                        // Handle blur with delay - only if no change occurred
+                        input.addEventListener('blur', function() {
+                            selectBlurTimeout = setTimeout(() => {
+                                // Only restore if value didn't change (user clicked away without selecting)
+                                if (!isSaving && input.value === initialValue) {
+                                    clearSafetyTimeout(); // Clear safety timeout
+                                    fieldElement.innerHTML = originalHTML;
+                                    fieldElement.className = 'editable-field';
+                                    const originalStyle = fieldElement.getAttribute('data-original-style') || '';
+                                    if (originalStyle) {
+                                        fieldElement.setAttribute('style', originalStyle);
+                                    }
+                                    fieldElement.removeAttribute('data-original-style');
+                                }
+                            }, 200);
+                        });
+                    } else {
+                        // For text inputs and time inputs, use blur
+                        input.addEventListener('blur', function() {
+                            setTimeout(() => {
+                                if (!isSaving) {
+                                    saveField();
+                                }
+                            }, 200);
+                        });
+                    }
                     
                     input.addEventListener('keydown', function(e) {
                         if (e.key === 'Enter') {
@@ -1416,8 +1597,15 @@ foreach ($programmeYearSemester as $row) {
                                 saveField();
                             }
                         } else if (e.key === 'Escape') {
+                            clearSafetyTimeout(); // Clear safety timeout when escaped
                             isSaving = false;
                             fieldElement.innerHTML = originalHTML;
+                            fieldElement.className = 'editable-field';
+                            const originalStyle = fieldElement.getAttribute('data-original-style') || '';
+                            if (originalStyle) {
+                                fieldElement.setAttribute('style', originalStyle);
+                            }
+                            fieldElement.removeAttribute('data-original-style');
                         }
                     });
                 }
@@ -1436,6 +1624,5 @@ foreach ($programmeYearSemester as $row) {
         
         }); // End DOMContentLoaded
     </script>
-</body>
-</html>
+<?php include 'admin/footer_modern.php'; ?>
 

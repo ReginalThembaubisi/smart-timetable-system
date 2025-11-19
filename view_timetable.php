@@ -6,9 +6,9 @@ if (!isset($_SESSION['admin_logged_in'])) {
 }
 
 require_once 'admin/config.php';
+require_once __DIR__ . '/includes/database.php';
 
-$pdo = new PDO("mysql:host=localhost;dbname=smart_timetable", "root", "");
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo = Database::getInstance()->getConnection();
 
 // Ensure programme, year_level, and semester columns exist
 try {
@@ -81,41 +81,44 @@ $stmt->execute($params);
 $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get unique values for filters
-// Check if any sessions have programme data
-$hasProgrammeData = $pdo->query("SELECT COUNT(*) FROM sessions WHERE programme IS NOT NULL AND programme != ''")->fetchColumn();
-$programmes = [];
-if ($hasProgrammeData > 0) {
-    $programmes = $pdo->query("SELECT DISTINCT programme FROM sessions WHERE programme IS NOT NULL AND programme != '' ORDER BY programme")->fetchAll(PDO::FETCH_COLUMN);
-}
+// Get programmes (even if year_level or semester are missing)
+$programmes = $pdo->query("SELECT DISTINCT programme FROM sessions WHERE programme IS NOT NULL AND programme != '' ORDER BY programme")->fetchAll(PDO::FETCH_COLUMN);
 $days = $pdo->query("SELECT DISTINCT day_of_week FROM sessions ORDER BY day_of_week")->fetchAll(PDO::FETCH_COLUMN);
 
 // Get all programme-year-semester combinations for dynamic filtering
+// More flexible: get combinations even if some fields are missing
 $programmeYearSemester = $pdo->query("
     SELECT DISTINCT programme, year_level, semester 
     FROM sessions 
-    WHERE programme IS NOT NULL AND programme != '' 
-    AND year_level IS NOT NULL AND year_level != ''
-    AND semester IS NOT NULL AND semester != ''
+    WHERE programme IS NOT NULL AND programme != ''
     ORDER BY programme, year_level, semester
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-// Build data structure for JavaScript
+// Build data structure for JavaScript - more flexible
 $filterData = [];
 foreach ($programmeYearSemester as $row) {
-    $prog = trim($row['programme']);
-    $year = trim($row['year_level']);
-    $sem = trim($row['semester']);
+    $prog = trim($row['programme'] ?? '');
+    $year = trim($row['year_level'] ?? '');
+    $sem = trim($row['semester'] ?? '');
     
-    if (empty($prog) || empty($year) || empty($sem)) continue;
+    // Skip if programme is empty
+    if (empty($prog)) continue;
     
+    // Initialize programme if not exists
     if (!isset($filterData[$prog])) {
         $filterData[$prog] = [];
     }
-    if (!isset($filterData[$prog][$year])) {
-        $filterData[$prog][$year] = [];
-    }
-    if (!in_array($sem, $filterData[$prog][$year])) {
-        $filterData[$prog][$year][] = $sem;
+    
+    // If year is provided, add it
+    if (!empty($year)) {
+        if (!isset($filterData[$prog][$year])) {
+            $filterData[$prog][$year] = [];
+        }
+        
+        // If semester is provided, add it
+        if (!empty($sem) && !in_array($sem, $filterData[$prog][$year])) {
+            $filterData[$prog][$year][] = $sem;
+        }
     }
 }
 
@@ -138,151 +141,26 @@ foreach ($sessions as $session) {
 
 $totalSessions = count($sessions);
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View Timetable - Smart Timetable</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #0a0a0a;
-            color: #ffffff;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        .container { display: flex; min-height: 100vh; }
-        
-        /* Sidebar - Same as dashboard */
-        .sidebar {
-            width: 280px;
-            background: #0a0a0a;
-            padding: 32px 24px;
-            border-right: 1px solid rgba(255,255,255,0.08);
-            position: fixed;
-            height: 100vh;
-            overflow-y: auto;
-        }
-        .sidebar::-webkit-scrollbar { width: 6px; }
-        .sidebar::-webkit-scrollbar-track { background: transparent; }
-        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-        
-        .sidebar-header {
-            margin-bottom: 48px;
-            padding-bottom: 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-        }
-        .sidebar-header h1 {
-            font-size: 22px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 12px;
-            letter-spacing: -0.5px;
-        }
-        .admin-console {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: rgba(255,255,255,0.6);
-            font-size: 13px;
-            margin-bottom: 8px;
-            font-weight: 500;
-        }
-        .sidebar-section {
-            margin-bottom: 32px;
-        }
-        .sidebar-section-title {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255,255,255,0.4);
-            margin-bottom: 16px;
-            padding: 0 12px;
-            font-weight: 600;
-        }
-        .sidebar-nav a {
-            display: flex;
-            align-items: center;
-            padding: 10px 12px;
-            color: rgba(255,255,255,0.7);
-            text-decoration: none;
-            border-radius: 8px;
-            margin-bottom: 4px;
-            transition: all 0.2s ease;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        .sidebar-nav a:hover {
-            background: rgba(102, 126, 234, 0.1);
-            color: #667eea;
-        }
-        .sidebar-nav a.active {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
-            color: #667eea;
-            border-left: 3px solid #667eea;
-        }
-        .sidebar-nav a i {
-            margin-right: 12px;
-            width: 20px;
-            font-style: normal;
-            font-size: 16px;
-        }
-        
-        /* Main Content */
-        .main-content {
-            margin-left: 280px;
-            flex: 1;
-            padding: 48px;
-            background: #0a0a0a;
-        }
-        
-        .back-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            color: rgba(255,255,255,0.7);
-            text-decoration: none;
-            font-size: 14px;
-            padding: 8px 16px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 8px;
-            transition: all 0.2s;
-            margin-bottom: 24px;
-        }
-        .back-btn:hover {
-            background: rgba(102, 126, 234, 0.1);
-            border-color: rgba(102, 126, 234, 0.3);
-            color: #667eea;
-        }
-        
-        .page-header {
-            margin-bottom: 32px;
-        }
-        .page-header h1 {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            letter-spacing: -1px;
-        }
-        .page-header p {
-            color: rgba(255,255,255,0.6);
-            font-size: 14px;
-        }
-        
+<?php
+// Use the shared modern admin shell
+$breadcrumbs = [
+    ['label' => 'Dashboard', 'href' => 'admin/index.php'],
+    ['label' => 'View Timetable', 'href' => null],
+];
+$page_actions = [];
+include 'admin/header_modern.php';
+?>
+            <!-- Local styles specific to this page -->
+            <style>
         /* Filters */
         .filters {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
             padding: 20px;
-            margin-bottom: 24px;
+            margin-bottom: 16px;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 16px;
         }
         .filter-group {
@@ -291,115 +169,150 @@ $totalSessions = count($sessions);
         }
         .filter-group label {
             font-size: 12px;
-            color: rgba(255,255,255,0.5);
+            color: rgba(220,230,255,0.8);
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-bottom: 8px;
             font-weight: 600;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .filter-group select,
         .filter-group input {
-            padding: 10px 14px;
+            padding: 10px 16px;
             background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 8px;
-            color: #ffffff;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 10px;
+            color: #e8edff;
             font-size: 14px;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .filter-group select:focus,
         .filter-group input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: rgba(59, 130, 246, 0.5);
             background: rgba(255,255,255,0.08);
         }
         .filter-actions {
             display: flex;
-            gap: 12px;
+            gap: 10px;
             align-items: flex-end;
+            justify-content: flex-end;
         }
         .btn {
             padding: 10px 20px;
-            border-radius: 8px;
-            border: none;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: rgba(59, 130, 246, 0.25);
+            color: #dce3ff;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            font-weight: 600;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+            background: rgba(59, 130, 246, 0.35);
+            border-color: rgba(59, 130, 246, 0.5);
         }
         .btn-secondary {
-            background: rgba(255,255,255,0.1);
-            color: rgba(255,255,255,0.8);
+            background: rgba(255,255,255,0.05);
+            color: rgba(220,230,255,0.8);
+            border: 1px solid rgba(255,255,255,0.12);
+            font-weight: 600;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .btn-secondary:hover {
-            background: rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(255,255,255,0.18);
         }
         
         /* Summary */
         .summary {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 24px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 20px;
+            padding: 20px 24px;
+            margin-bottom: 16px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            backdrop-filter: blur(14px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .summary-text {
             font-size: 14px;
-            color: rgba(255,255,255,0.7);
+            color: rgba(220,230,255,0.75);
         }
         .summary-count {
             font-size: 24px;
             font-weight: 700;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: #dce3ff;
         }
+        /* Day chips */
+        .day-chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 16px; }
+        .chip {
+            display:inline-flex; align-items:center; gap:8px;
+            border:1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.05);
+            color: rgba(220,230,255,0.75);
+            font-size:12px; padding:8px 14px; border-radius:12px;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            backdrop-filter: blur(10px);
+        }
+        .chip svg { width:14px; height:14px; opacity:.85; color: rgba(220,230,255,0.8); }
         
         /* Timetable by day */
         .day-section {
             margin-bottom: 32px;
         }
         .day-header {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            padding: 16px 20px;
+            position: sticky; top: 64px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 20px;
+            padding: 18px 24px;
             margin-bottom: 16px;
+            z-index: 10;
+            backdrop-filter: blur(14px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .day-header h2 {
             font-size: 20px;
             font-weight: 700;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
+            color: #e8edff;
+            letter-spacing: -0.2px;
         }
         .day-header p {
             font-size: 13px;
-            color: rgba(255,255,255,0.6);
+            color: rgba(220,230,255,0.75);
         }
         .sessions-grid {
             display: grid;
             gap: 12px;
         }
         .session-card {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
-            padding: 20px;
-            transition: all 0.2s;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 16px;
+            padding: 18px 20px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .session-card:hover {
-            border-color: rgba(102, 126, 234, 0.5);
-            background: rgba(102, 126, 234, 0.05);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.18);
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
         .session-header {
             display: flex;
@@ -410,15 +323,16 @@ $totalSessions = count($sessions);
         .session-time {
             font-size: 18px;
             font-weight: 700;
-            color: #667eea;
+            color: #dce3ff;
         }
         .session-module {
             font-size: 16px;
             font-weight: 600;
             margin-bottom: 8px;
+            color: #e8edff;
         }
         .session-module-code {
-            color: rgba(255,255,255,0.5);
+            color: rgba(220,230,255,0.65);
             font-size: 13px;
             font-weight: 400;
         }
@@ -433,104 +347,62 @@ $totalSessions = count($sessions);
             align-items: center;
             gap: 8px;
             font-size: 13px;
-            color: rgba(255,255,255,0.7);
+            color: rgba(220,230,255,0.75);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .session-detail-icon {
             font-size: 16px;
+            color: rgba(220,230,255,0.6);
         }
         
         .empty-state {
             text-align: center;
             padding: 60px 20px;
-            color: rgba(255,255,255,0.5);
+            color: rgba(220,230,255,0.65);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .empty-state-icon {
             font-size: 64px;
             margin-bottom: 16px;
+            color: rgba(220,230,255,0.4);
         }
         .empty-state h3 {
             font-size: 20px;
             margin-bottom: 8px;
-            color: rgba(255,255,255,0.8);
+            color: rgba(220,230,255,0.8);
+            font-weight: 600;
         }
     </style>
-</head>
-<body>
-    <div class="container">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <h1>SMART TIMETABLE</h1>
-                <div class="admin-console">
-                    <span>⚙️</span>
-                    <span>Admin Console</span>
-                </div>
-            </div>
-            
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">Overview</div>
-                <nav class="sidebar-nav">
-                    <a href="dashboard.php"><i>📊</i> Dashboard</a>
-                </nav>
-            </div>
-            
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">Academic Structure</div>
-                <nav class="sidebar-nav">
-                    <a href="#"><i>🏛️</i> Faculties</a>
-                    <a href="#"><i>🏫</i> Schools</a>
-                    <a href="#"><i>📜</i> Programmes</a>
-                    <a href="#"><i>📅</i> Academic Years</a>
-                </nav>
-            </div>
-            
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">People & Resources</div>
-                <nav class="sidebar-nav">
-                    <a href="admin/students.php"><i>👥</i> Students</a>
-                    <a href="admin/lecturers.php"><i>👤</i> Lecturers</a>
-                    <a href="admin/venues.php"><i>📍</i> Venues</a>
-                </nav>
-            </div>
-            
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">Curriculum & Timetable</div>
-                <nav class="sidebar-nav">
-                    <a href="admin/modules.php"><i>📚</i> Modules</a>
-                    <a href="admin/timetable.php"><i>➕</i> Add Session</a>
-                    <a href="timetable_editor.php"><i>✏️</i> Edit Sessions</a>
-                    <a href="view_timetable.php" class="active"><i>📋</i> View Timetable</a>
-                    <a href="timetable_pdf_parser.php"><i>📤</i> Upload Timetable</a>
-                    <a href="admin/exams.php"><i>📆</i> Exam Timetables</a>
-                </nav>
-            </div>
-        </div>
-        
-        <!-- Main Content -->
-        <div class="main-content">
-            <a href="dashboard.php" class="back-btn">
-                <span>←</span>
-                <span>Back to Dashboard</span>
-            </a>
-            
-            <div class="page-header">
-                <h1>View Timetable</h1>
-                <p>Browse all timetable sessions organized by day</p>
-                <?php if (empty($programmes) && $totalSessions > 0): ?>
-                    <div style="margin-top: 16px; padding: 12px 16px; background: rgba(255, 193, 7, 0.2); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 8px; color: #ffc107; font-size: 13px;">
-                        ⚠️ <strong>Notice:</strong> Your sessions don't have programme/year/semester data. Please go to <strong>Semester Management</strong> to clear data, then <strong>Upload Timetable</strong> again to save programme information.
+            <?php if (empty($programmes) && $totalSessions > 0): ?>
+                <div class="content-card" style="margin-bottom:20px; border: 1px solid rgba(241, 196, 15, 0.3); background: rgba(241, 196, 15, 0.12); border-radius: 16px; padding: 18px 22px; backdrop-filter: blur(10px); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                    <div style="display:flex; gap:14px; align-items:flex-start;">
+                        <div style="width: 36px; height: 36px; background: rgba(241, 196, 15, 0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(241, 196, 15, 0.3);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:18px;height:18px; color: #fcd34d;">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                        </div>
+                        <div style="flex: 1; min-width: 0;">
+                            <strong style="color: #fcd34d; font-size: 14px; font-weight: 700; display: block; margin-bottom: 8px;">Notice:</strong>
+                            <div style="color: rgba(252, 211, 77, 0.9); font-size: 13px; line-height: 1.6;">
+                                Your sessions don't have programme/year/semester data.<br>
+                                • Upload timetable via <strong style="color: rgba(252, 211, 77, 0.95);">Upload Timetable</strong> to automatically extract programme data, OR<br>
+                                • Manually add programme/year/semester when creating sessions.
+                            </div>
+                        </div>
                     </div>
-                <?php endif; ?>
-            </div>
+                </div>
+            <?php endif; ?>
             
             <!-- Filters -->
-            <form method="GET" class="filters">
+            <form method="GET" class="filters" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.10); border-radius: 24px; padding: 24px; backdrop-filter: blur(14px); box-shadow: 0 4px 20px rgba(0,0,0,0.45); margin-bottom: 20px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
                 <div class="filter-group">
                     <label>Programme</label>
                     <select name="programme" id="programmeSelect">
                         <option value="">All Programmes</option>
                         <?php if (empty($programmes)): ?>
-                            <option value="" disabled>⚠️ No programmes found - Sessions need to be re-uploaded</option>
+                            <option value="" disabled>⚠️ No programmes found - Upload timetable to add programmes</option>
                         <?php else: ?>
                             <?php foreach ($programmes as $programme): ?>
                                 <option value="<?= htmlspecialchars($programme) ?>" <?= $programmeFilter === $programme ? 'selected' : '' ?>>
@@ -544,18 +416,19 @@ $totalSessions = count($sessions);
                 <div class="filter-group">
                     <label>Year Level</label>
                     <select name="year" id="yearFilter">
-                        <option value="">All Years</option>
+                        <option value="">All Year Levels</option>
                         <?php 
-                        // Get all unique years from all programmes
+                        // Get all unique year levels from database
                         $allYears = [];
-                        foreach ($filterData as $prog => $years) {
-                            foreach (array_keys($years) as $year) {
-                                if (!in_array($year, $allYears)) {
-                                    $allYears[] = $year;
-                                }
-                            }
+                        if ($programmeFilter) {
+                            // If programme selected, get years for that programme
+                            $stmt = $pdo->prepare("SELECT DISTINCT year_level FROM sessions WHERE programme = ? AND year_level IS NOT NULL AND year_level != '' ORDER BY year_level");
+                            $stmt->execute([$programmeFilter]);
+                            $allYears = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                        } else {
+                            // Get all unique years from all programmes
+                            $allYears = $pdo->query("SELECT DISTINCT year_level FROM sessions WHERE year_level IS NOT NULL AND year_level != '' ORDER BY year_level")->fetchAll(PDO::FETCH_COLUMN);
                         }
-                        sort($allYears);
                         foreach ($allYears as $year): ?>
                             <option value="<?= htmlspecialchars($year) ?>" <?= $yearFilter === $year ? 'selected' : '' ?>>
                                 <?= htmlspecialchars($year) ?>
@@ -565,22 +438,26 @@ $totalSessions = count($sessions);
                 </div>
                 
                 <div class="filter-group">
-                    <label>Semester</label>
+                    <label>Semester <span style="color: rgba(255,255,255,0.4); font-weight: normal; font-size: 11px;">(Optional)</span></label>
                     <select name="semester" id="semesterFilter">
                         <option value="">All Semesters</option>
                         <?php 
-                        // Get all unique semesters
+                        // Get semesters based on filters
                         $allSemesters = [];
-                        foreach ($filterData as $prog => $years) {
-                            foreach ($years as $year => $semesters) {
-                                foreach ($semesters as $semester) {
-                                    if (!in_array($semester, $allSemesters)) {
-                                        $allSemesters[] = $semester;
-                                    }
-                                }
-                            }
+                        if ($programmeFilter && $yearFilter) {
+                            // If both programme and year selected, get semesters for that combination
+                            $stmt = $pdo->prepare("SELECT DISTINCT semester FROM sessions WHERE programme = ? AND year_level = ? AND semester IS NOT NULL AND semester != '' ORDER BY semester");
+                            $stmt->execute([$programmeFilter, $yearFilter]);
+                            $allSemesters = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                        } elseif ($programmeFilter) {
+                            // If only programme selected, get all semesters for that programme
+                            $stmt = $pdo->prepare("SELECT DISTINCT semester FROM sessions WHERE programme = ? AND semester IS NOT NULL AND semester != '' ORDER BY semester");
+                            $stmt->execute([$programmeFilter]);
+                            $allSemesters = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                        } else {
+                            // Get all unique semesters
+                            $allSemesters = $pdo->query("SELECT DISTINCT semester FROM sessions WHERE semester IS NOT NULL AND semester != '' ORDER BY semester")->fetchAll(PDO::FETCH_COLUMN);
                         }
-                        sort($allSemesters);
                         foreach ($allSemesters as $semester): ?>
                             <option value="<?= htmlspecialchars($semester) ?>" <?= $semesterFilter === $semester ? 'selected' : '' ?>>
                                 <?= htmlspecialchars($semester) ?>
@@ -607,6 +484,24 @@ $totalSessions = count($sessions);
                 </div>
             </form>
             
+            <div style="margin-top: 16px; margin-bottom: 16px; padding: 18px 22px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 16px; backdrop-filter: blur(10px); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                <div style="display:flex; gap:14px; align-items:flex-start;">
+                    <div style="width: 36px; height: 36px; background: rgba(59, 130, 246, 0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(59, 130, 246, 0.3);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:18px;height:18px; color: #93c5fd;">
+                            <path d="M12 3a7 7 0 0 0-4 12.83V18a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.17A7 7 0 0 0 12 3Z"/><path d="M9 18h6"/><path d="M10 22h4"/>
+                        </svg>
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <strong style="color: #e8edff; font-size: 14px; font-weight: 700; display: block; margin-bottom: 8px;">Filter Guide:</strong>
+                        <div style="color: rgba(220,230,255,0.85); font-size: 13px; line-height: 1.6;">
+                            • Select a <strong style="color: rgba(220,230,255,0.95);">Programme</strong> (e.g., "Diploma in ICT") and <strong style="color: rgba(220,230,255,0.95);">Year Level</strong> (e.g., "Level 1") to filter the timetable<br>
+                            • <strong style="color: rgba(220,230,255,0.95);">Semester</strong> is optional - use it to further filter by specific semester (e.g., "Semester 1", "Semester 2")<br>
+                            • Leave filters empty to view all sessions
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Summary -->
             <div class="summary">
                 <div class="summary-text">
@@ -615,21 +510,34 @@ $totalSessions = count($sessions);
                         (filtered)
                     <?php endif; ?>
                     <?php if ($programmeFilter): ?>
-                        <br><span style="font-size: 12px; color: rgba(255,255,255,0.5);">Programme: <?= htmlspecialchars($programmeFilter) ?></span>
+                        <br><span style="font-size: 12px; color: rgba(220,230,255,0.65);">Programme: <?= htmlspecialchars($programmeFilter) ?></span>
                     <?php endif; ?>
                     <?php if ($yearFilter): ?>
-                        <span style="font-size: 12px; color: rgba(255,255,255,0.5);"> | Year: <?= htmlspecialchars($yearFilter) ?></span>
+                        <span style="font-size: 12px; color: rgba(220,230,255,0.65);"> | Year: <?= htmlspecialchars($yearFilter) ?></span>
                     <?php endif; ?>
                     <?php if ($semesterFilter): ?>
-                        <span style="font-size: 12px; color: rgba(255,255,255,0.5);"> | Semester: <?= htmlspecialchars($semesterFilter) ?></span>
+                        <span style="font-size: 12px; color: rgba(220,230,255,0.65);"> | Semester: <?= htmlspecialchars($semesterFilter) ?></span>
                     <?php endif; ?>
                 </div>
             </div>
+            <!-- Quick day chips for fast scroll -->
+            <?php if (!empty($sessionsByDay)): ?>
+            <div class="day-chips">
+                <?php foreach (['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] as $d): if (!isset($sessionsByDay[$d])) continue; ?>
+                <a class="chip" href="#day-<?= strtolower($d) ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"/></svg>
+                    <?= $d ?>
+                </a>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
             
             <!-- Timetable by Day -->
             <?php if (empty($sessionsByDay)): ?>
                 <div class="empty-state">
-                    <div class="empty-state-icon">📅</div>
+                    <div class="empty-state-icon" aria-hidden="true" style="color:#6366F1;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width:64px; height:64px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>
+                    </div>
                     <h3>No Sessions Found</h3>
                     <p>No timetable sessions match your filters. Try adjusting your search criteria or upload a timetable file.</p>
                 </div>
@@ -640,7 +548,7 @@ $totalSessions = count($sessions);
                     if (!isset($sessionsByDay[$day])) continue;
                     $daySessions = $sessionsByDay[$day];
                 ?>
-                    <div class="day-section">
+                    <div class="day-section" id="day-<?= strtolower($day) ?>">
                         <div class="day-header">
                             <h2><?= htmlspecialchars($day) ?></h2>
                             <p><?= count($daySessions) ?> session<?= count($daySessions) !== 1 ? 's' : '' ?></p>
@@ -667,19 +575,25 @@ $totalSessions = count($sessions);
                                         <div class="session-details" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
                                             <?php if ($session['programme']): ?>
                                                 <div class="session-detail">
-                                                    <span class="session-detail-icon">📜</span>
+                                                    <span class="session-detail-icon" aria-hidden="true">
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><path d="M8 2h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M8 6h8"/><path d="M8 10h8"/><path d="M8 14h6"/></svg>
+                                                    </span>
                                                     <span><?= htmlspecialchars($session['programme']) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if ($session['year_level']): ?>
                                                 <div class="session-detail">
-                                                    <span class="session-detail-icon">📅</span>
+                                                    <span class="session-detail-icon" aria-hidden="true">
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>
+                                                    </span>
                                                     <span>Year <?= htmlspecialchars($session['year_level']) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if ($session['semester']): ?>
                                                 <div class="session-detail">
-                                                    <span class="session-detail-icon">📆</span>
+                                                    <span class="session-detail-icon" aria-hidden="true">
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M8 14h4"/></svg>
+                                                    </span>
                                                     <span><?= htmlspecialchars($session['semester']) ?></span>
                                                 </div>
                                             <?php endif; ?>
@@ -689,14 +603,18 @@ $totalSessions = count($sessions);
                                     <div class="session-details">
                                         <?php if ($session['lecturer_name']): ?>
                                             <div class="session-detail">
-                                                <span class="session-detail-icon">👤</span>
+                                                <span class="session-detail-icon" aria-hidden="true">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+                                                </span>
                                                 <span><?= htmlspecialchars($session['lecturer_name']) ?></span>
                                             </div>
                                         <?php endif; ?>
                                         
                                         <?php if ($session['venue_name']): ?>
                                             <div class="session-detail">
-                                                <span class="session-detail-icon">📍</span>
+                                                <span class="session-detail-icon" aria-hidden="true">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><path d="M12 21s-6-5.33-6-10a6 6 0 1 1 12 0c0 4.67-6 10-6 10z"/><circle cx="12" cy="11" r="2"/></svg>
+                                                </span>
                                                 <span><?= htmlspecialchars($session['venue_name']) ?></span>
                                             </div>
                                         <?php endif; ?>
@@ -711,158 +629,28 @@ $totalSessions = count($sessions);
     </div>
     
     <script>
-        // Filter data from PHP
-        const filterData = <?= json_encode($filterData) ?>;
-        
-        console.log('Filter Data:', filterData); // Debug
-        
+        // Simple auto-submit on filter change - PHP handles dropdown population
         const programmeSelect = document.getElementById('programmeSelect');
         const yearSelect = document.getElementById('yearFilter');
         const semesterSelect = document.getElementById('semesterFilter');
         
-        // Function to populate year dropdown
-        function populateYears(programme) {
-            if (!yearSelect) return;
-            
-            // Clear existing options except "All Years"
-            yearSelect.innerHTML = '<option value="">All Years</option>';
-            
-            if (programme && filterData[programme]) {
-                const years = Object.keys(filterData[programme]).sort();
-                years.forEach(year => {
-                    const option = document.createElement('option');
-                    option.value = year;
-                    option.textContent = year;
-                    yearSelect.appendChild(option);
-                });
-            }
-        }
-        
-        // Function to populate semester dropdown
-        function populateSemesters(programme, year) {
-            if (!semesterSelect) return;
-            
-            // Clear existing options except "All Semesters"
-            semesterSelect.innerHTML = '<option value="">All Semesters</option>';
-            
-            if (programme && year && filterData[programme] && filterData[programme][year]) {
-                const semesters = filterData[programme][year].sort();
-                semesters.forEach(semester => {
-                    const option = document.createElement('option');
-                    option.value = semester;
-                    option.textContent = semester;
-                    semesterSelect.appendChild(option);
-                });
-            }
-        }
-        
-        // Initialize: If programme is already selected on page load, populate years
-        if (programmeSelect && programmeSelect.value) {
-            populateYears(programmeSelect.value);
-            
-            // If year is also selected, populate semesters
-            if (yearSelect && yearSelect.value) {
-                populateSemesters(programmeSelect.value, yearSelect.value);
-            }
-        }
-        
-        // Update year dropdown when programme changes and auto-apply filters
+        // Auto-apply filters when programme changes
         if (programmeSelect) {
             programmeSelect.addEventListener('change', function() {
-                const selectedProgramme = this.value;
-                
-                // If a programme is selected, filter years to show only relevant ones
-                // Otherwise, keep all years visible
-                if (selectedProgramme && filterData[selectedProgramme]) {
-                    populateYears(selectedProgramme);
-                } else {
-                    // Show all years if no programme selected
-                    if (yearSelect) {
-                        yearSelect.innerHTML = '<option value="">All Years</option>';
-                        // Get all unique years
-                        const allYears = new Set();
-                        Object.values(filterData).forEach(years => {
-                            Object.keys(years).forEach(year => allYears.add(year));
-                        });
-                        Array.from(allYears).sort().forEach(year => {
-                            const option = document.createElement('option');
-                            option.value = year;
-                            option.textContent = year;
-                            yearSelect.appendChild(option);
-                        });
-                    }
-                }
-                
-                // Clear semester when programme changes
-                if (semesterSelect) {
-                    semesterSelect.innerHTML = '<option value="">All Semesters</option>';
-                    // Show all semesters if no programme/year selected
-                    if (!selectedProgramme) {
-                        const allSemesters = new Set();
-                        Object.values(filterData).forEach(years => {
-                            Object.values(years).forEach(semesters => {
-                                semesters.forEach(sem => allSemesters.add(sem));
-                            });
-                        });
-                        Array.from(allSemesters).sort().forEach(semester => {
-                            const option = document.createElement('option');
-                            option.value = semester;
-                            option.textContent = semester;
-                            semesterSelect.appendChild(option);
-                        });
-                    }
-                }
-                
-                // Auto-apply filters when programme changes
+                // Reset year and semester when programme changes
+                if (yearSelect) yearSelect.value = '';
+                if (semesterSelect) semesterSelect.value = '';
+                // Submit form to reload with new filters
                 document.querySelector('form[method="get"]').submit();
             });
         }
         
-        // Update semester dropdown when year changes and auto-apply filters
+        // Auto-apply filters when year changes
         if (yearSelect) {
             yearSelect.addEventListener('change', function() {
-                const selectedProgramme = programmeSelect ? programmeSelect.value : '';
-                const selectedYear = this.value;
-                
-                if (selectedProgramme && selectedYear) {
-                    populateSemesters(selectedProgramme, selectedYear);
-                } else if (selectedYear) {
-                    // If year selected but no programme, show all semesters for that year
-                    if (semesterSelect) {
-                        semesterSelect.innerHTML = '<option value="">All Semesters</option>';
-                        const allSemesters = new Set();
-                        Object.values(filterData).forEach(years => {
-                            if (years[selectedYear]) {
-                                years[selectedYear].forEach(sem => allSemesters.add(sem));
-                            }
-                        });
-                        Array.from(allSemesters).sort().forEach(semester => {
-                            const option = document.createElement('option');
-                            option.value = semester;
-                            option.textContent = semester;
-                            semesterSelect.appendChild(option);
-                        });
-                    }
-                } else {
-                    // Show all semesters if no year selected
-                    if (semesterSelect) {
-                        semesterSelect.innerHTML = '<option value="">All Semesters</option>';
-                        const allSemesters = new Set();
-                        Object.values(filterData).forEach(years => {
-                            Object.values(years).forEach(semesters => {
-                                semesters.forEach(sem => allSemesters.add(sem));
-                            });
-                        });
-                        Array.from(allSemesters).sort().forEach(semester => {
-                            const option = document.createElement('option');
-                            option.value = semester;
-                            option.textContent = semester;
-                            semesterSelect.appendChild(option);
-                        });
-                    }
-                }
-                
-                // Auto-apply filters when year changes
+                // Reset semester when year changes
+                if (semesterSelect) semesterSelect.value = '';
+                // Submit form to reload with new filters
                 document.querySelector('form[method="get"]').submit();
             });
         }
@@ -870,10 +658,10 @@ $totalSessions = count($sessions);
         // Auto-apply filters when semester changes
         if (semesterSelect) {
             semesterSelect.addEventListener('change', function() {
+                // Submit form to reload with new filters
                 document.querySelector('form[method="get"]').submit();
             });
         }
     </script>
-</body>
-</html>
+<?php include 'admin/footer_modern.php'; ?>
 

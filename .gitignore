@@ -1,0 +1,42 @@
+vendor/
+node_modules/
+**/dist/
+**/build/
+logs/
+logs/*.log
+logs/*.txt
+logs/archive/
+frontend/
+archive/
+docs/
+composer.lock
+package-lock.json
+public.code-workspace
+.DS_Store
+Thumbs.db
+*.env
+*.local
+
+# Sensitive configuration files (if they contain hardcoded credentials)
+# Uncomment if config.php has sensitive data:
+# admin/config.php
+
+# Database dumps with real data
+*.sql
+!database_setup.sql
+!create_work_experience_table.sql
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Helper files for GitHub upload (not needed in repo)
+BEFORE_GITHUB_CHECKLIST.md
+QUICK_GITHUB_UPLOAD.md
+UPLOAD_TO_GITHUB.bat
+GITHUB_README.md
+
+

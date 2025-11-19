@@ -1,117 +1,122 @@
 <?php
+// This page is deprecated in favor of the parser and view pages.
+header('Location: ../view_timetable.php');
+exit;
 session_start();
 if (!isset($_SESSION['admin_logged_in'])) {
     header('Location: login.php');
     exit;
 }
 
-$pdo = new PDO("mysql:host=localhost;dbname=smart_timetable", "root", "");
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+require_once 'config.php';
+require_once __DIR__ . '/../includes/database.php';
+require_once __DIR__ . '/../includes/crud_helpers.php';
+require_once __DIR__ . '/../includes/helpers.php';
 
-if (isset($_GET['delete']) && isset($_GET['id'])) {
-    $stmt = $pdo->prepare("DELETE FROM sessions WHERE session_id = ?");
-    $stmt->execute([$_GET['id']]);
-    header('Location: timetable.php');
-    exit;
-}
+$pdo = Database::getInstance()->getConnection();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['session_id']) && $_POST['session_id']) {
-        $stmt = $pdo->prepare("UPDATE sessions SET module_id = ?, lecturer_id = ?, venue_id = ?, day_of_week = ?, start_time = ?, end_time = ? WHERE session_id = ?");
-        $stmt->execute([$_POST['module_id'], $_POST['lecturer_id'] ?: null, $_POST['venue_id'] ?: null, $_POST['day_of_week'], $_POST['start_time'], $_POST['end_time'], $_POST['session_id']]);
-    } else {
-        $stmt = $pdo->prepare("INSERT INTO sessions (module_id, lecturer_id, venue_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$_POST['module_id'], $_POST['lecturer_id'] ?: null, $_POST['venue_id'] ?: null, $_POST['day_of_week'], $_POST['start_time'], $_POST['end_time']]);
+// Deletions disabled - sessions are managed via parser/editor
+
+// Manual add/update disabled - sessions are created via parser or editor
+
+try {
+    $sessions = $pdo->query("SELECT s.*, m.module_code, m.module_name, l.lecturer_name, v.venue_name FROM sessions s LEFT JOIN modules m ON s.module_id = m.module_id LEFT JOIN lecturers l ON s.lecturer_id = l.lecturer_id LEFT JOIN venues v ON s.venue_id = v.venue_id ORDER BY s.day_of_week, s.start_time")->fetchAll(PDO::FETCH_ASSOC);
+    $modules = getAllRecords('modules', 'module_code');
+    $lecturers = getAllRecords('lecturers', 'lecturer_name');
+    $venues = getAllRecords('venues', 'venue_name');
+    
+    $editSession = null;
+    if (isset($_GET['edit'])) {
+        $editSession = getRecordById('sessions', (int)$_GET['edit']);
     }
-    header('Location: timetable.php');
-    exit;
-}
-
-$sessions = $pdo->query("SELECT s.*, m.module_code, m.module_name, l.lecturer_name, v.venue_name FROM sessions s LEFT JOIN modules m ON s.module_id = m.module_id LEFT JOIN lecturers l ON s.lecturer_id = l.lecturer_id LEFT JOIN venues v ON s.venue_id = v.venue_id ORDER BY s.day_of_week, s.start_time")->fetchAll(PDO::FETCH_ASSOC);
-$modules = $pdo->query("SELECT * FROM modules ORDER BY module_code")->fetchAll(PDO::FETCH_ASSOC);
-$lecturers = $pdo->query("SELECT * FROM lecturers ORDER BY lecturer_name")->fetchAll(PDO::FETCH_ASSOC);
-$venues = $pdo->query("SELECT * FROM venues ORDER BY venue_name")->fetchAll(PDO::FETCH_ASSOC);
-
-$editSession = null;
-if (isset($_GET['edit'])) {
-    $stmt = $pdo->prepare("SELECT * FROM sessions WHERE session_id = ?");
-    $stmt->execute([$_GET['edit']]);
-    $editSession = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    logError($e, 'Loading timetable sessions');
+    $sessions = [];
+    $modules = [];
+    $lecturers = [];
+    $venues = [];
+    $editSession = null;
+    if (empty($_SESSION['error_message'])) {
+        $_SESSION['error_message'] = getErrorMessage($e, 'Loading timetable');
+    }
 }
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Manage Timetable</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <?php include 'header.php'; ?>
-    <div class="container">
-        <a href="index.php" class="back-link">← Back to Dashboard</a>
-        <h2>Manage Timetable Sessions</h2>
-        <form method="POST" class="form">
-            <input type="hidden" name="session_id" value="<?= $editSession['session_id'] ?? '' ?>">
-            <select name="module_id" required>
-                <option value="">Select Module</option>
-                <?php foreach ($modules as $module): ?>
-                    <option value="<?= $module['module_id'] ?>" <?= ($editSession['module_id'] ?? '') == $module['module_id'] ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($module['module_code'] . ' - ' . $module['module_name']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <select name="lecturer_id">
-                <option value="">Select Lecturer</option>
-                <?php foreach ($lecturers as $lecturer): ?>
-                    <option value="<?= $lecturer['lecturer_id'] ?>" <?= ($editSession['lecturer_id'] ?? '') == $lecturer['lecturer_id'] ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($lecturer['lecturer_name']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <select name="venue_id">
-                <option value="">Select Venue</option>
-                <?php foreach ($venues as $venue): ?>
-                    <option value="<?= $venue['venue_id'] ?>" <?= ($editSession['venue_id'] ?? '') == $venue['venue_id'] ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($venue['venue_name']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <select name="day_of_week" required>
-                <option value="">Select Day</option>
-                <?php foreach (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as $day): ?>
-                    <option value="<?= $day ?>" <?= ($editSession['day_of_week'] ?? '') == $day ? 'selected' : '' ?>><?= $day ?></option>
-                <?php endforeach; ?>
-            </select>
-            <input type="time" name="start_time" placeholder="Start Time" value="<?= $editSession['start_time'] ?? '' ?>" required>
-            <input type="time" name="end_time" placeholder="End Time" value="<?= $editSession['end_time'] ?? '' ?>" required>
-            <button type="submit"><?= $editSession ? 'Update' : 'Add' ?> Session</button>
-            <?php if ($editSession): ?>
-                <a href="timetable.php" class="btn-cancel">Cancel</a>
+<?php
+$breadcrumbs = [
+    ['label' => 'Dashboard', 'href' => 'index.php'],
+    ['label' => 'Sessions', 'href' => null],
+];
+$page_actions = [
+    ['label' => 'View Timetable', 'href' => '../view_timetable.php'],
+    ['label' => 'Upload Timetable', 'href' => '../timetable_pdf_parser.php'],
+];
+include 'header_modern.php';
+?>
+
+            <?php if (isset($_SESSION['success_message'])): ?>
+                <div class="alert alert-success">
+                    <?= htmlspecialchars($_SESSION['success_message']) ?>
+                </div>
+                <?php unset($_SESSION['success_message']); ?>
             <?php endif; ?>
-        </form>
-        <table>
-            <thead>
-                <tr><th>ID</th><th>Module</th><th>Day</th><th>Time</th><th>Lecturer</th><th>Venue</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-                <?php foreach ($sessions as $session): ?>
-                <tr>
-                    <td><?= $session['session_id'] ?></td>
-                    <td><?= htmlspecialchars($session['module_code'] . ' - ' . $session['module_name']) ?></td>
-                    <td><?= htmlspecialchars($session['day_of_week']) ?></td>
-                    <td><?= htmlspecialchars($session['start_time'] . ' - ' . $session['end_time']) ?></td>
-                    <td><?= htmlspecialchars($session['lecturer_name'] ?? '-') ?></td>
-                    <td><?= htmlspecialchars($session['venue_name'] ?? '-') ?></td>
-                    <td>
-                        <a href="?edit=<?= $session['session_id'] ?>">Edit</a> |
-                        <a href="?delete=1&id=<?= $session['session_id'] ?>" onclick="return confirm('Are you sure?')">Delete</a>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+            
+            <?php if (isset($_SESSION['error_message'])): ?>
+                <div class="alert alert-error">
+                    <?= htmlspecialchars($_SESSION['error_message']) ?>
+                </div>
+                <?php unset($_SESSION['error_message']); ?>
+            <?php endif; ?>
+            
+            <!-- Storage-only: no manual add/update form -->
+            
+            <div class="table-container card">
+                <table class="table compact">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Module</th>
+                            <th>Day</th>
+                            <th>Time</th>
+                            <th>Lecturer</th>
+                            <th>Venue</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($sessions)): ?>
+                            <tr>
+                                <td colspan="7" style="text-align: center; padding: 60px 40px; color: rgba(220,230,255,0.65); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                                    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 48px; height: 48px; color: rgba(220,230,255,0.4); margin-bottom: 8px;">
+                                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                                        </svg>
+                                        <div style="font-size: 15px; font-weight: 600; color: rgba(220,230,255,0.8);">No sessions found</div>
+                                        <div style="font-size: 13px; color: rgba(220,230,255,0.65);">Upload a timetable file or add sessions manually.</div>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($sessions as $session): ?>
+                            <tr>
+                                <td style="color: rgba(220,230,255,0.6); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"><?= $session['session_id'] ?></td>
+                                <td style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                                    <strong style="color: #e8edff; font-weight: 600; font-size: 14px;"><?= htmlspecialchars($session['module_code']) ?></strong><br>
+                                    <small style="color: rgba(220,230,255,0.65); font-size: 12px;"><?= htmlspecialchars($session['module_name']) ?></small>
+                                </td>
+                                <td style="color: rgba(220,230,255,0.75); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"><?= htmlspecialchars($session['day_of_week']) ?></td>
+                                <td style="color: rgba(220,230,255,0.75); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"><?= htmlspecialchars($session['start_time'] . ' - ' . $session['end_time']) ?></td>
+                                <td style="color: rgba(220,230,255,0.75); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"><?= htmlspecialchars($session['lecturer_name'] ?? '-') ?></td>
+                                <td style="color: rgba(220,230,255,0.75); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"><?= htmlspecialchars($session['venue_name'] ?? '-') ?></td>
+                                <td><span class="pill pill--muted">View only</span></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+
+<?php include 'footer_modern.php'; ?>
 

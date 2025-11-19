@@ -1,63 +1,52 @@
 <?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+require_once __DIR__ . '/includes/api_helpers.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
+setCORSHeaders();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'message' => 'Method not allowed']);
-    exit;
+    sendJSONResponse(false, null, 'Method not allowed', 405);
 }
 
 try {
-    $data = json_decode(file_get_contents('php://input'), true);
-    
-    if (!isset($data['student_id']) || !isset($data['current_password']) || !isset($data['new_password'])) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Missing required fields']);
-        exit;
-    }
+    $data = getJSONInput();
+    validateRequired($data, ['student_id', 'current_password', 'new_password']);
     
     $studentId = (int)$data['student_id'];
     $currentPassword = $data['current_password'];
     $newPassword = $data['new_password'];
     
-    $pdo = new PDO('mysql:host=localhost;dbname=smart_timetable', 'root', '');
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    // Validate new password strength
+    if (strlen($newPassword) < 6) {
+        sendJSONResponse(false, null, 'New password must be at least 6 characters long', 400);
+    }
+    
+    $pdo = getDBConnection();
     
     $stmt = $pdo->prepare('SELECT password FROM students WHERE student_id = ?');
     $stmt->execute([$studentId]);
     $student = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$student) {
-        echo json_encode(['success' => false, 'message' => 'Student not found']);
-        exit;
+        sendJSONResponse(false, null, 'Student not found', 404);
     }
     
     // Verify current password
-    if ($student['password'] !== $currentPassword && !password_verify($currentPassword, $student['password'])) {
-        echo json_encode(['success' => false, 'message' => 'Current password is incorrect']);
-        exit;
+    if (!verifyPassword($currentPassword, $student['password'])) {
+        sendJSONResponse(false, null, 'Current password is incorrect', 401);
     }
     
-    // Update password
+    // Hash and update password
+    $hashedPassword = hashPassword($newPassword);
     $stmt = $pdo->prepare('UPDATE students SET password = ? WHERE student_id = ?');
-    $stmt->execute([$newPassword, $studentId]);
+    $stmt->execute([$hashedPassword, $studentId]);
     
-    echo json_encode(['success' => true, 'message' => 'Password changed successfully']);
+    logActivity('password_change', "Student ID: $studentId changed password", $studentId);
     
-} catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    sendJSONResponse(true, null, 'Password changed successfully');
+    
 } catch (Exception $e) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
+    handleAPIError($e, 'Password change failed');
 }
 ?>
+
 

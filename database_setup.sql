@@ -8,7 +8,6 @@ USE smart_timetable;
 
 -- Drop tables if they exist (in reverse order of dependencies)
 DROP TABLE IF EXISTS exam_notifications;
-DROP TABLE IF EXISTS study_sessions;
 DROP TABLE IF EXISTS student_modules;
 DROP TABLE IF EXISTS exams;
 DROP TABLE IF EXISTS sessions;
@@ -103,25 +102,6 @@ CREATE TABLE exams (
     FOREIGN KEY (module_id) REFERENCES modules(module_id) ON DELETE CASCADE,
     FOREIGN KEY (venue_id) REFERENCES venues(venue_id) ON DELETE SET NULL,
     INDEX idx_exam_date (exam_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Create study_sessions table (student-created study sessions)
-CREATE TABLE study_sessions (
-    session_id INT AUTO_INCREMENT PRIMARY KEY,
-    student_id INT NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    module_name VARCHAR(255),
-    day_of_week VARCHAR(20) NOT NULL,
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    duration INT,
-    session_type VARCHAR(50),
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
-    INDEX idx_student_id (student_id),
-    INDEX idx_day_time (day_of_week, start_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Create exam_notifications table

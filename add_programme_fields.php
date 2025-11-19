@@ -7,9 +7,9 @@ if (!isset($_SESSION['admin_logged_in'])) {
 }
 
 require_once 'admin/config.php';
+require_once __DIR__ . '/includes/database.php';
 
-$pdo = new PDO("mysql:host=localhost;dbname=smart_timetable", "root", "");
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo = Database::getInstance()->getConnection();
 
 $message = '';
 $messageType = '';
@@ -57,7 +57,7 @@ try {
     <div class="message <?= $messageType ?>">
         <?= htmlspecialchars($message) ?>
     </div>
-    <a href="dashboard.php">← Back to Dashboard</a>
+    <a href="admin/index.php">← Back to Dashboard</a>
 </body>
 </html>
 

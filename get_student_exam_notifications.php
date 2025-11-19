@@ -1,52 +1,61 @@
 <?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+require_once __DIR__ . '/includes/api_helpers.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
+setCORSHeaders();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'message' => 'Method not allowed']);
-    exit;
+    sendJSONResponse(false, null, 'Method not allowed', 405);
 }
 
 try {
     $studentId = isset($_GET['student_id']) ? (int)$_GET['student_id'] : 0;
     
     if ($studentId <= 0) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Invalid student ID']);
-        exit;
+        sendJSONResponse(false, null, 'Invalid student ID', 400);
     }
     
-    $pdo = new PDO('mysql:host=localhost;dbname=smart_timetable', 'root', '');
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo = getDBConnection();
+
+	// Ensure notifications table exists to avoid 500 on fresh setups
+	try {
+		$pdo->exec("
+			CREATE TABLE IF NOT EXISTS exam_notifications (
+				notification_id INT AUTO_INCREMENT PRIMARY KEY,
+				student_id INT NOT NULL,
+				exam_id INT NULL,
+				title VARCHAR(255) NULL,
+				message TEXT NULL,
+				is_read TINYINT(1) NOT NULL DEFAULT 0,
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				INDEX idx_student_id (student_id),
+				INDEX idx_exam_id (exam_id)
+			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+		");
+	} catch (Throwable $t) {
+		// If creation fails, still continue to attempt read; worst case, return empty list
+	}
+	
+	try {
+		$stmt = $pdo->prepare('
+			SELECT n.*, e.exam_status
+			FROM exam_notifications n
+			LEFT JOIN exams e ON n.exam_id = e.exam_id
+			WHERE n.student_id = ? AND n.is_read = 0
+			ORDER BY n.created_at DESC
+		');
+		$stmt->execute([$studentId]);
+		$notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+	} catch (PDOException $pe) {
+		// If table still doesn't exist or other DB error, return empty list gracefully
+		error_log('Exam notifications query failed: ' . $pe->getMessage());
+		$notifications = [];
+	}
     
-    $stmt = $pdo->prepare('
-        SELECT n.*
-        FROM exam_notifications n
-        WHERE n.student_id = ? AND n.is_read = 0
-        ORDER BY n.created_at DESC
-    ');
-    $stmt->execute([$studentId]);
-    $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    sendJSONResponse(true, ['notifications' => $notifications], 'Notifications retrieved successfully');
     
-    echo json_encode([
-        'success' => true,
-        'notifications' => $notifications
-    ]);
-    
-} catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
 } catch (Exception $e) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
+    handleAPIError($e, 'Failed to retrieve notifications');
 }
 ?>
+
 

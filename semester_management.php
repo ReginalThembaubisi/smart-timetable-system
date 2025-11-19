@@ -6,9 +6,9 @@ if (!isset($_SESSION['admin_logged_in'])) {
 }
 
 require_once 'admin/config.php';
+require_once __DIR__ . '/includes/database.php';
 
-$pdo = new PDO("mysql:host=localhost;dbname=smart_timetable", "root", "");
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo = Database::getInstance()->getConnection();
 
 $message = '';
 $messageType = '';
@@ -349,7 +349,7 @@ $stats = [
             <div class="sidebar-section">
                 <div class="sidebar-section-title">Overview</div>
                 <nav class="sidebar-nav">
-                    <a href="dashboard.php"><i>📊</i> Dashboard</a>
+                    <a href="admin/index.php"><i>📊</i> Dashboard</a>
                 </nav>
             </div>
             
@@ -394,7 +394,7 @@ $stats = [
         
         <!-- Main Content -->
         <div class="main-content">
-            <a href="dashboard.php" class="back-btn">
+            <a href="admin/index.php" class="back-btn">
                 <span>←</span>
                 <span>Back to Dashboard</span>
             </a>

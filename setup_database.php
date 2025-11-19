@@ -228,24 +228,6 @@ header('Content-Type: text/html; charset=utf-8');
                             INDEX idx_exam_date (exam_date)
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
                         
-                        "CREATE TABLE IF NOT EXISTS study_sessions (
-                            session_id INT AUTO_INCREMENT PRIMARY KEY,
-                            student_id INT NOT NULL,
-                            title VARCHAR(255) NOT NULL,
-                            module_name VARCHAR(255),
-                            day_of_week VARCHAR(20) NOT NULL,
-                            start_time TIME NOT NULL,
-                            end_time TIME NOT NULL,
-                            duration INT,
-                            session_type VARCHAR(50),
-                            notes TEXT,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                            FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
-                            INDEX idx_student_id (student_id),
-                            INDEX idx_day_time (day_of_week, start_time)
-                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-                        
                         "CREATE TABLE IF NOT EXISTS exam_notifications (
                             notification_id INT AUTO_INCREMENT PRIMARY KEY,
                             student_id INT NOT NULL,

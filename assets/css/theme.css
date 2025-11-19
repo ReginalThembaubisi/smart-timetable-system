@@ -1,0 +1,393 @@
+/* ShadCN-inspired unified theme for Smart Timetable (dark) */
+
+/* Design Tokens */
+:root {
+	/* Colors */
+	--bg-primary: #0B0B0F;
+	--bg-secondary: #111115;
+	--bg-tertiary: #111115;
+	--bg-card: #111115;
+	--bg-card-hover: #141419;
+	--border-color: #1F1F25;
+	--border-hover: #2A2A31;
+
+	--accent-primary: #6366F1;
+	--accent-secondary: #585CF0;
+	--accent-gradient: linear-gradient(135deg, #6366F1 0%, #585CF0 100%);
+	--accent-hover: #7C83FF;
+
+	--text-primary: #E4E4E7;
+	--text-secondary: #E4E4E7;
+	--text-tertiary: #A1A1AA;
+	--text-muted: #A1A1AA;
+
+	/* Spacing (4, 8, 12, 16, 20, 24, 32) */
+	--spacing-xs: 4px;
+	--spacing-sm: 8px;
+	--spacing-md: 12px;
+	--spacing-lg: 16px;
+	--spacing-xl: 20px;
+	--spacing-2xl: 24px;
+	--spacing-3xl: 32px;
+
+	/* Radius (6, 10, 16, 20) */
+	--radius-sm: 6px;
+	--radius-md: 10px;
+	--radius-lg: 16px;
+	--radius-xl: 20px;
+
+	/* Shadows */
+	--shadow-card: 0 4px 20px rgba(0,0,0,0.25);
+	--shadow-hover: 0 6px 28px rgba(0,0,0,0.35);
+}
+
+/* Base */
+html, body {
+	background: var(--bg-primary);
+	color: var(--text-primary);
+}
+body {
+	font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+/* Card - Premium Neo-Glass Style */
+.card, .content-card {
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	border-radius: 24px;
+	padding: var(--spacing-3xl);
+	backdrop-filter: blur(14px);
+	box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.card:hover, .content-card:hover {
+	background: rgba(255, 255, 255, 0.08);
+	border-color: rgba(255, 255, 255, 0.18);
+	box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+	transform: translateY(-2px);
+}
+
+/* Buttons - Premium Neo-Glass Style */
+.btn, button[type="submit"] {
+	padding: 10px 20px;
+	background: rgba(255,255,255,0.08);
+	border: 1px solid rgba(255,255,255,0.15);
+	border-radius: 10px;
+	color: #e8edff;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	text-decoration: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.btn:hover, button[type="submit"]:hover {
+	background: rgba(255,255,255,0.12);
+	border-color: rgba(255,255,255,0.22);
+	transform: translateY(-2px);
+}
+.btn-cancel { 
+	background: rgba(255,255,255,0.05); 
+	border: 1px solid rgba(255,255,255,0.12); 
+	color: rgba(220,230,255,0.8); 
+}
+.btn-cancel:hover { 
+	background: rgba(255,255,255,0.08); 
+	border-color: rgba(255,255,255,0.18); 
+}
+.btn-danger { 
+	background: rgba(239,68,68,0.15); 
+	border: 1px solid rgba(239,68,68,0.3); 
+	color: #fca5a5; 
+}
+.btn-danger:hover { 
+	background: rgba(239,68,68,0.2); 
+	border-color: rgba(239,68,68,0.4); 
+}
+.btn-success { 
+	background: rgba(16,185,129,0.15); 
+	border: 1px solid rgba(16,185,129,0.3); 
+	color: #6ee7b7; 
+}
+.btn-success:hover { 
+	background: rgba(16,185,129,0.2); 
+	border-color: rgba(16,185,129,0.4); 
+}
+
+/* Inputs - Premium Neo-Glass Style */
+.form, .search-bar {
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	border-radius: 24px;
+	padding: var(--spacing-3xl);
+	backdrop-filter: blur(14px);
+	box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.form-row {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	gap: var(--spacing-xl);
+	margin-bottom: var(--spacing-xl);
+}
+.form-group label {
+	display: block;
+	margin-bottom: var(--spacing-sm);
+	color: rgba(220,230,255,0.8);
+	font-size: 14px;
+	font-weight: 600;
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.form input, .form select, .form textarea, .search-bar input {
+	width: 100%;
+	padding: 10px 16px;
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 10px;
+	color: #e8edff;
+	font-size: 14px;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.form input:focus, .form select:focus, .form textarea:focus, .search-bar input:focus {
+	outline: none;
+	border-color: rgba(255, 255, 255, 0.25);
+	background: rgba(255, 255, 255, 0.08);
+	box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+}
+.form input::placeholder, .search-bar input::placeholder { 
+	color: rgba(220,230,255,0.5); 
+}
+
+/* Tables - Premium Neo-Glass Style */
+.table-container {
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	border-radius: 24px;
+	padding: var(--spacing-2xl);
+	backdrop-filter: blur(14px);
+	box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+	overflow: hidden;
+}
+.table, table {
+	width: 100%;
+	border-collapse: collapse;
+}
+.table thead, table thead {
+	background: rgba(255, 255, 255, 0.06);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.table th, .table td, table th, table td {
+	padding: var(--spacing-lg);
+	text-align: left;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.table th, table th {
+	font-weight: 600;
+	text-transform: uppercase;
+	font-size: 12px;
+	letter-spacing: 1px;
+	color: rgba(220,230,255,0.7);
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.table tbody tr:hover, table tbody tr:hover {
+	background: rgba(255,255,255,0.06);
+}
+.table td, table td {
+	color: rgba(220,230,255,0.9);
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.table a, table a {
+	color: #dce3ff;
+	text-decoration: none;
+	font-weight: 500;
+}
+.table a:hover, table a:hover { 
+	color: #e8edff; 
+	text-decoration: underline; 
+}
+
+/* Sidebar + Main */
+.ds-sidebar {
+	width: 280px;
+	background: var(--bg-secondary);
+	border-right: 1px solid var(--border-color);
+}
+.ds-main {
+	margin-left: 280px;
+	background: var(--bg-primary);
+	min-height: 100vh;
+	padding: var(--spacing-3xl);
+}
+.sidebar-nav a {
+	border-radius: var(--radius-sm);
+}
+.sidebar-nav a.active {
+	color: var(--accent-primary);
+	background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(88, 92, 240, 0.12) 100%);
+}
+.sidebar-nav a:hover {
+	color: var(--accent-primary);
+}
+
+/* Page Header */
+.page-title {
+	font-size: 32px;
+	font-weight: 800;
+	letter-spacing: -0.5px;
+	background: linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.92) 100%);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+}
+.page-subtitle { color: var(--text-tertiary); }
+
+/* Alerts - Premium Neo-Glass Style */
+.alert {
+	padding: var(--spacing-lg) var(--spacing-2xl);
+	border-radius: 12px;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	background: rgba(255, 255, 255, 0.05);
+	backdrop-filter: blur(14px);
+	box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+	margin-bottom: var(--spacing-lg);
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.alert-success { 
+	color: #6ee7b7; 
+	border-color: rgba(16,185,129,0.35); 
+	background: rgba(16,185,129,0.12); 
+}
+.alert-error { 
+	color: #fca5a5; 
+	border-color: rgba(239,68,68,0.35); 
+	background: rgba(239,68,68,0.12); 
+}
+.alert-info { 
+	color: #93c5fd; 
+	border-color: rgba(59,130,246,0.35); 
+	background: rgba(59,130,246,0.12); 
+}
+
+/* Toolbar - Premium Neo-Glass Style */
+.toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-md);
+	flex-wrap: wrap;
+}
+.toolbar input[type="text"], .toolbar select {
+	padding: 10px 16px;
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 10px;
+	color: #e8edff;
+	font-size: 14px;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.toolbar input[type="text"]:focus, .toolbar select:focus {
+	outline: none;
+	border-color: rgba(255, 255, 255, 0.25);
+	background: rgba(255, 255, 255, 0.08);
+	box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+}
+.toolbar input[type="text"]::placeholder {
+	color: rgba(220,230,255,0.5);
+}
+
+/* Pills/Badges - Premium Neo-Glass Style */
+.pill, .badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 12px;
+	border-radius: 8px;
+	font-size: 12px;
+	font-weight: 600;
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	letter-spacing: 0.01em;
+}
+.pill--blue, .badge--blue {
+	background: rgba(59, 130, 246, 0.15);
+	border: 1px solid rgba(59, 130, 246, 0.3);
+	color: #93c5fd;
+}
+.pill--yellow, .badge--yellow {
+	background: rgba(234, 179, 8, 0.15);
+	border: 1px solid rgba(234, 179, 8, 0.3);
+	color: #fde047;
+}
+.pill--purple, .badge--purple {
+	background: rgba(168, 85, 247, 0.15);
+	border: 1px solid rgba(168, 85, 247, 0.3);
+	color: #c4b5fd;
+}
+.pill--muted, .badge--muted {
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	color: rgba(220,230,255,0.5);
+}
+
+/* Icon Buttons - Premium Neo-Glass Style */
+.icon-btn, .actions a, .actions button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 10px;
+	color: #dce3ff;
+	cursor: pointer;
+	text-decoration: none;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.icon-btn:hover, .actions a:hover, .actions button:hover {
+	background: rgba(255, 255, 255, 0.08);
+	border-color: rgba(255, 255, 255, 0.18);
+	color: #e8edff;
+	transform: translateY(-2px);
+}
+.icon-btn svg, .actions a svg, .actions button svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 1.7;
+}
+.actions {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+/* Bulk Toolbar - Premium Neo-Glass Style */
+.bulkbar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 16px;
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	border-radius: 12px;
+	margin-bottom: 16px;
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+	.ds-sidebar { transform: translateX(-100%); transition: transform .3s ease; }
+	.ds-sidebar.open { transform: translateX(0); }
+	.ds-main { margin-left: 0; padding: var(--spacing-xl); }
+	table { font-size: 12px; }
+	.table th, .table td, table th, table td { padding: 10px; }
+}
+
+
