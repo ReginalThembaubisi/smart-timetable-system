@@ -117,7 +117,12 @@ try {
     $stats['setup_progress'] = min(100, round($setupProgress));
     
 } catch (Exception $e) {
-    logError($e, 'Loading dashboard statistics');
+    // Log error if function exists, otherwise just use error_log
+    if (function_exists('logError')) {
+        logError($e, 'Loading dashboard statistics');
+    } else {
+        error_log('Loading dashboard statistics: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+    }
     $stats = [
         'students' => 0, 'modules' => 0, 'sessions' => 0, 'exams' => 0, 
         'lecturers' => 0, 'venues' => 0, 'programs' => 0, 'enrollments' => 0,
