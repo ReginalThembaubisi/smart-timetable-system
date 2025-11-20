@@ -1,0 +1,32 @@
+{
+  "buildings": [
+    {
+      "id": "eng",
+      "name": "Engineering",
+      "floors": [
+        {
+          "id": "eng-1",
+          "name": "Floor 1",
+          "image": "",
+          "nodes": [
+            { "id": "n1", "x": 0.12, "y": 0.80, "label": "Entrance" },
+            { "id": "n2", "x": 0.35, "y": 0.72, "label": "" },
+            { "id": "n3", "x": 0.60, "y": 0.70, "label": "" },
+            { "id": "n4", "x": 0.78, "y": 0.55, "label": "ENG-105" }
+          ],
+          "edges": [
+            { "from": "n1", "to": "n2", "w": 1.0 },
+            { "from": "n2", "to": "n3", "w": 1.0 },
+            { "from": "n3", "to": "n4", "w": 1.0 }
+          ],
+          "venues": [
+            { "id": "ENTRANCE", "name": "Main Entrance", "nodeId": "n1" },
+            { "id": "ENG-105", "name": "Room 105", "nodeId": "n4" }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+
