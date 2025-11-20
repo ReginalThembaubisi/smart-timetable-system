@@ -22,6 +22,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
 require_once 'config.php';
 require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/../includes/crud_helpers.php';
 
 // Get statistics
 try {
