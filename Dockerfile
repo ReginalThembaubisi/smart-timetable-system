@@ -1,16 +1,17 @@
 FROM php:8.2-cli
 
-# Install system dependencies, MySQL extensions, and tools needed for Composer
-RUN apt-get update && apt-get install -y \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    zip \
-    unzip \
-    git \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) pdo_mysql mysqli zip \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install system dependencies and tools needed for Composer
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        zip \
+        unzip \
+        git \
+        libzip-dev \
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions
+RUN docker-php-ext-install -j$(nproc) pdo_mysql mysqli zip
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
