@@ -3,7 +3,7 @@
 	"description": "Slim-based API scaffold for Smart Timetable under public/api",
 	"type": "project",
 	"require": {
-		"php": ">=8.0",
+		"php": ">=8.2",
 		"ext-pdo": "*",
 		"ext-pdo_mysql": "*",
 		"slim/slim": "^4.13",
