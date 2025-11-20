@@ -439,5 +439,6 @@ function logError($e, $context = 'Error', $additionalData = []) {
     // Also log to PHP error log
     error_log("{$context}: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
 }
+}
 ?>
 
