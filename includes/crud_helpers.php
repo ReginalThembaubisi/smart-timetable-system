@@ -406,39 +406,40 @@ function getErrorMessage($e, $context = 'Operation', $showDetails = false) {
  * @param string $context Context description
  * @param array $additionalData Additional data to log
  */
-function logError($e, $context = 'Error', $additionalData = []) {
-    $logDir = __DIR__ . '/../logs';
-    if (!is_dir($logDir)) {
-        @mkdir($logDir, 0755, true);
+if (!function_exists('logError')) {
+    function logError($e, $context = 'Error', $additionalData = []) {
+        $logDir = __DIR__ . '/../logs';
+        if (!is_dir($logDir)) {
+            @mkdir($logDir, 0755, true);
+        }
+        
+        $logFile = $logDir . '/error.log';
+        $timestamp = date('Y-m-d H:i:s');
+        $user = isset($_SESSION['admin_logged_in']) ? ($_SESSION['admin_user_id'] ?? 'Admin') : 'Guest';
+        $ip = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
+        
+        $logEntry = [
+            'timestamp' => $timestamp,
+            'context' => $context,
+            'user' => $user,
+            'ip' => $ip,
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'code' => $e->getCode(),
+            'trace' => $e->getTraceAsString()
+        ];
+        
+        if (!empty($additionalData)) {
+            $logEntry['additional'] = $additionalData;
+        }
+        
+        $logLine = json_encode($logEntry) . PHP_EOL;
+        @file_put_contents($logFile, $logLine, FILE_APPEND | LOCK_EX);
+        
+        // Also log to PHP error log
+        error_log("{$context}: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
     }
-    
-    $logFile = $logDir . '/error.log';
-    $timestamp = date('Y-m-d H:i:s');
-    $user = isset($_SESSION['admin_logged_in']) ? ($_SESSION['admin_user_id'] ?? 'Admin') : 'Guest';
-    $ip = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
-    
-    $logEntry = [
-        'timestamp' => $timestamp,
-        'context' => $context,
-        'user' => $user,
-        'ip' => $ip,
-        'error' => $e->getMessage(),
-        'file' => $e->getFile(),
-        'line' => $e->getLine(),
-        'code' => $e->getCode(),
-        'trace' => $e->getTraceAsString()
-    ];
-    
-    if (!empty($additionalData)) {
-        $logEntry['additional'] = $additionalData;
-    }
-    
-    $logLine = json_encode($logEntry) . PHP_EOL;
-    @file_put_contents($logFile, $logLine, FILE_APPEND | LOCK_EX);
-    
-    // Also log to PHP error log
-    error_log("{$context}: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
-}
 }
 ?>
 
