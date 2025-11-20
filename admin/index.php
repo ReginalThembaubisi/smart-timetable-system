@@ -24,6 +24,13 @@ require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/crud_helpers.php';
 
+// Ensure logError function exists (fallback if include failed)
+if (!function_exists('logError')) {
+    function logError($e, $context = 'Error', $additionalData = []) {
+        error_log("{$context}: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+    }
+}
+
 // Get statistics
 try {
     $pdo = Database::getInstance()->getConnection();
