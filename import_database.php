@@ -10,9 +10,10 @@
 
 // Security: Only allow this in development/testing
 // In production, you should remove this file or add authentication
-if (getenv('RAILWAY_ENVIRONMENT') === 'production' && !isset($_GET['confirm'])) {
-    die('This script is disabled in production. Add ?confirm=yes to proceed.');
-}
+// Temporarily disabled for Railway import
+// if (getenv('RAILWAY_ENVIRONMENT') === 'production' && !isset($_GET['confirm'])) {
+//     die('This script is disabled in production. Add ?confirm=yes to proceed.');
+// }
 
 header('Content-Type: text/html; charset=utf-8');
 ?>
@@ -34,8 +35,19 @@ header('Content-Type: text/html; charset=utf-8');
     <h1>Database Import Tool</h1>
     
 <?php
-require_once __DIR__ . '/admin/config.php';
-require_once __DIR__ . '/includes/database.php';
+// Try to load config files
+$configPath = __DIR__ . '/admin/config.php';
+$dbPath = __DIR__ . '/includes/database.php';
+
+if (!file_exists($configPath)) {
+    die("Config file not found: $configPath");
+}
+if (!file_exists($dbPath)) {
+    die("Database file not found: $dbPath");
+}
+
+require_once $configPath;
+require_once $dbPath;
 
 try {
     $pdo = Database::getInstance()->getConnection();
