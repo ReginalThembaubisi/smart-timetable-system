@@ -2,11 +2,11 @@
 // Modern unified header/sidebar for admin pages
 $current_page = basename($_SERVER['PHP_SELF']);
 // Resolve asset base path correctly based on current page URL
-// If page is in /admin/admin/, use ../ to go up to /admin/assets/
-// If page is in /admin/ root, use assets/ directly (same level)
+// For Railway: files are in /app/admin/admin/, assets are in /app/assets/
+// So we need to go up two levels: ../../
 $scriptPath = $_SERVER['PHP_SELF'];
-$isInAdminSubdir = (strpos($scriptPath, '/admin/admin/') !== false);
-$baseHref = $isInAdminSubdir ? '../' : '';
+$isInAdminSubdir = (strpos($scriptPath, '/admin/admin/') !== false || strpos($scriptPath, '/admin/') !== false);
+$baseHref = $isInAdminSubdir ? '../../' : '../';
 // Version-bust static assets to prevent stale cache after updates
 $themeCssPath = __DIR__ . '/../assets/css/theme.css';
 $assetVersion = @filemtime($themeCssPath);
