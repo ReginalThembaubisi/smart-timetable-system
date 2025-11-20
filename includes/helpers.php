@@ -5,7 +5,7 @@
  */
 
 require_once __DIR__ . '/database.php';
-require_once __DIR__ . '/crud_helpers.php';
+require_once __DIR__ . '/crud_helpers.php'; // Includes logError() function
 
 /**
  * Hash a password using BCRYPT
