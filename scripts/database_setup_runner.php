@@ -20,6 +20,12 @@ if (!file_exists($sqlFile)) {
 }
 
 try {
+    $dsn = sprintf('mysql:host=%s;charset=utf8mb4', DB_HOST);
+    $rootPdo = new PDO($dsn, DB_USER, DB_PASS, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
+    $rootPdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
     $pdo = Database::getInstance()->getConnection();
 } catch (Exception $e) {
     fwrite(STDERR, "Unable to connect to the database before setup: " . $e->getMessage() . "\n");
