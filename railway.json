@@ -5,7 +5,7 @@
     "buildCommand": "composer install --no-dev"
   },
   "deploy": {
-    "startCommand": "php -S 0.0.0.0:$PORT -t .",
+    "startCommand": "php scripts/database_setup_runner.php && php -S 0.0.0.0:$PORT -t .",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
