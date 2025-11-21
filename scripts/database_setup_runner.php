@@ -10,9 +10,6 @@ declare(strict_types=1);
 require __DIR__ . '/../admin/config.php';
 require __DIR__ . '/../includes/database.php';
 
-use PDO;
-use PDOException;
-
 $sqlFile = __DIR__ . '/../database_setup.sql';
 if (!file_exists($sqlFile)) {
     fwrite(STDERR, "database_setup.sql not found; skipping auto-run.\n");
@@ -23,7 +20,6 @@ try {
     $dsn = sprintf('mysql:host=%s;charset=utf8mb4', DB_HOST);
     $rootPdo = new PDO($dsn, DB_USER, DB_PASS, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
     $rootPdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
     $pdo = Database::getInstance()->getConnection();
@@ -38,14 +34,15 @@ if ($sql === false) {
     exit(1);
 }
 
-// Sanitize the file: remove CREATE DATABASE/USE lines and comments.
+// Sanitize the file: remove CREATE DATABASE/USE lines and strip standalone comment lines.
 $sql = preg_replace('/CREATE DATABASE.*?;(\s?)/i', '', $sql);
 $sql = preg_replace('/USE\s+\S+;(\s?)/i', '', $sql);
+$sql = preg_replace('/^\s*--.*$/m', '', $sql);
 
 $statements = array_filter(array_map('trim', explode(';', $sql)));
 $executed = 0;
 foreach ($statements as $statement) {
-    if ($statement === '' || str_starts_with($statement, '--')) {
+    if ($statement === '') {
         continue;
     }
 
