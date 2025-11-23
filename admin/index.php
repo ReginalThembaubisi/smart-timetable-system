@@ -126,7 +126,7 @@ try {
 } catch (Exception $e) {
     // Log error if function exists, otherwise just use error_log
     if (function_exists('logError')) {
-        logError($e, 'Loading dashboard statistics');
+    logError($e, 'Loading dashboard statistics');
     } else {
         error_log('Loading dashboard statistics: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
     }
