@@ -27,3 +27,4 @@ class AppConfig {
   static const int connectionTimeout = 30000; // 30 seconds for web dev
   static const int receiveTimeout = 30000; // 30 seconds for web dev
 }
+
