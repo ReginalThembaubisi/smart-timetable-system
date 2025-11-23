@@ -77,10 +77,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($clearableTables as $table => $info) {
             if (in_array($table, $tablesToClear)) {
                 try {
+                    // Check if table exists first
+                    $tableExists = $pdo->query("SHOW TABLES LIKE '{$table}'")->rowCount() > 0;
+                    if (!$tableExists) {
+                        error_log("Table {$table} does not exist, skipping");
+                        continue;
+                    }
+                    
                     // Use DELETE FROM instead of TRUNCATE (TRUNCATE fails with foreign keys)
                     $pdo->exec("DELETE FROM `{$table}`");
-                    // Reset AUTO_INCREMENT manually
-                    $pdo->exec("ALTER TABLE `{$table}` AUTO_INCREMENT = 1");
+                    
+                    // Reset AUTO_INCREMENT only if table has an AUTO_INCREMENT column
+                    try {
+                        $pdo->exec("ALTER TABLE `{$table}` AUTO_INCREMENT = 1");
+                    } catch (Exception $e) {
+                        // Table might not have AUTO_INCREMENT, ignore this error
+                        error_log("Could not reset AUTO_INCREMENT for {$table}: " . $e->getMessage());
+                    }
+                    
                     $cleared[] = $info['name'];
                     logActivity('data_cleared', "Cleared table: {$table}", getCurrentUserId());
                     error_log("Successfully cleared table: {$table}");
