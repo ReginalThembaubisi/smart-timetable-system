@@ -7,7 +7,9 @@ CREATE DATABASE IF NOT EXISTS smart_timetable;
 USE smart_timetable;
 
 -- Drop tables if they exist (in reverse order of dependencies)
+-- Drop tables with foreign keys first
 DROP TABLE IF EXISTS exam_notifications;
+DROP TABLE IF EXISTS program_modules;
 DROP TABLE IF EXISTS student_modules;
 DROP TABLE IF EXISTS exams;
 DROP TABLE IF EXISTS sessions;

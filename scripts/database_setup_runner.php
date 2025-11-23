@@ -34,6 +34,13 @@ if ($sql === false) {
     exit(1);
 }
 
+// Disable foreign key checks before dropping tables
+try {
+    $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
+} catch (PDOException $e) {
+    // Ignore if not supported
+}
+
 // Sanitize the file: remove CREATE DATABASE/USE lines and strip standalone comment lines.
 $sql = preg_replace('/CREATE DATABASE.*?;(\s?)/i', '', $sql);
 $sql = preg_replace('/USE\s+\S+;(\s?)/i', '', $sql);
@@ -55,9 +62,20 @@ foreach ($statements as $statement) {
         if (stripos($message, 'already exists') !== false) {
             continue;
         }
+        // Ignore "doesn't exist" errors for DROP TABLE statements
+        if (stripos($message, "doesn't exist") !== false || stripos($message, 'not found') !== false) {
+            continue;
+        }
         fwrite(STDERR, "Failed to execute SQL statement: {$message}\nStatement: {$statement}\n");
         exit(1);
     }
+}
+
+// Re-enable foreign key checks
+try {
+    $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
+} catch (PDOException $e) {
+    // Ignore if not supported
 }
 
 fwrite(STDOUT, "Auto database setup completed ({$executed} statements executed).\n");
