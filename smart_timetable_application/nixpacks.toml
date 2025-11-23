@@ -1,6 +1,10 @@
 [phases.setup]
 nixPkgs = ["bash", "git", "curl", "unzip", "php82"]
 
+# Skip install phase - build script handles Flutter setup and pub get
+[phases.install]
+cmds = []
+
 [phases.build]
 cmds = ["bash build_railway.sh"]
 
