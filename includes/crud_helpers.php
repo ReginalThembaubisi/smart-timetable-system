@@ -441,5 +441,3 @@ if (!function_exists('logError')) {
         error_log("{$context}: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
     }
 }
-?>
-
