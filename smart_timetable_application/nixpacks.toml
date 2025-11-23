@@ -1,0 +1,9 @@
+[phases.setup]
+nixPkgs = ["bash", "git", "curl", "unzip", "php82"]
+
+[phases.build]
+cmds = ["bash build_railway.sh"]
+
+[start]
+cmd = "php -S 0.0.0.0:$PORT -t build/web"
+
