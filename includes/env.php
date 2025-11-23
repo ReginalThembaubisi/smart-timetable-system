@@ -43,4 +43,3 @@ function loadEnv(string $envPath): void
 $projectRoot = dirname(__DIR__);
 loadEnv($projectRoot . DIRECTORY_SEPARATOR . '.env');
 
-
