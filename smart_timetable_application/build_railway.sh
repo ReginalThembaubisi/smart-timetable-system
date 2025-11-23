@@ -27,8 +27,8 @@ echo "--- Installing Flutter dependencies ---"
 flutter pub get
 
 echo "--- Building Flutter web app ---"
-# Use Railway's API_BASE_URL environment variable, with fallback
-API_BASE_URL_VAR=${API_BASE_URL:-"https://web-production-f8792.up.railway.app/admin"}
+# Use Railway's API_BASE_URL environment variable, with fallback (NO /admin - backend serves from root)
+API_BASE_URL_VAR=${API_BASE_URL:-"https://web-production-f8792.up.railway.app"}
 echo "Building with API_BASE_URL: $API_BASE_URL_VAR"
 
 flutter build web --release --dart-define=API_BASE_URL="$API_BASE_URL_VAR"
