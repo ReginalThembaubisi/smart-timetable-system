@@ -20,6 +20,9 @@ export PATH="$FLUTTER_DIR/bin/cache/dart-sdk/bin:$PATH"
 # Verify Flutter is available
 flutter --version
 
+echo "--- Configuring project for web ---"
+flutter create . --platforms web
+
 echo "--- Installing Flutter dependencies ---"
 flutter pub get
 
