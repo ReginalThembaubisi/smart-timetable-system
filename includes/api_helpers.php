@@ -47,60 +47,61 @@ function sendJSONResponse($success, $data = null, $message = '', $statusCode = 2
  * In production, replace '*' with specific allowed origins
  */
 function setCORSHeaders() {
-    header('Content-Type: application/json');
-    
     // Get the origin from the request
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? $_SERVER['HTTP_REFERER'] ?? '';
     
-    // Get allowed origins from config or use default (allow all Railway domains)
-    $allowedOrigins = defined('API_ALLOWED_ORIGINS') ? API_ALLOWED_ORIGINS : '*';
+    // Extract origin from referer if needed
+    if (empty($origin) && !empty($_SERVER['HTTP_REFERER'])) {
+        $parsed = parse_url($_SERVER['HTTP_REFERER']);
+        $origin = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? '');
+    }
     
-    // If using credentials, we must specify exact origin, not '*'
-    // Allow all Railway domains and common development origins
-    $railwayDomains = [
-        'web-production-ffbb.up.railway.app',
-        'web-production-f8792.up.railway.app',
+    // Always allow the Flutter app origin
+    $allowedOrigins = [
+        'https://web-production-ffbb.up.railway.app',
+        'http://web-production-ffbb.up.railway.app',
+        'https://web-production-f8792.up.railway.app',
+        'http://web-production-f8792.up.railway.app',
     ];
     
-    if ($allowedOrigins === '*' || empty($allowedOrigins)) {
-        // Check if it's a Railway domain or allow if no origin (direct access)
-        if (empty($origin)) {
-            header('Access-Control-Allow-Origin: *');
+    // Also allow localhost for development
+    $isLocalhost = !empty($origin) && (
+        strpos($origin, 'localhost') !== false || 
+        strpos($origin, '127.0.0.1') !== false ||
+        strpos($origin, '0.0.0.0') !== false
+    );
+    
+    // Set CORS headers - MUST be set before any output
+    if (!empty($origin)) {
+        // Check if origin is in allowed list or is localhost
+        $isAllowed = in_array($origin, $allowedOrigins) || $isLocalhost;
+        if ($isAllowed) {
+            header("Access-Control-Allow-Origin: $origin");
         } else {
-            $isRailway = false;
-            foreach ($railwayDomains as $domain) {
-                if (strpos($origin, $domain) !== false) {
-                    $isRailway = true;
-                    break;
-                }
-            }
-            if ($isRailway || strpos($origin, 'localhost') !== false || strpos($origin, '127.0.0.1') !== false) {
-                header("Access-Control-Allow-Origin: $origin");
-            } else {
-                header('Access-Control-Allow-Origin: *');
-            }
+            // Fallback: allow all for now (can restrict later)
+            header('Access-Control-Allow-Origin: *');
         }
     } else {
-        $allowed = explode(',', $allowedOrigins);
-        if (in_array($origin, $allowed)) {
-            header("Access-Control-Allow-Origin: $origin");
-        }
+        // No origin header, allow all
+        header('Access-Control-Allow-Origin: *');
     }
     
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization, Accept');
-    // Only set credentials if we're using a specific origin (not '*')
-    if (!empty($origin) && $origin !== '*') {
-        header('Access-Control-Allow-Credentials: true');
-    }
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, Accept, X-Requested-With');
+    header('Access-Control-Allow-Credentials: true');
+    header('Access-Control-Max-Age: 86400'); // Cache preflight for 24 hours
     
+    // Handle preflight OPTIONS request
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
         http_response_code(200);
-        // Flush empty body cleanly
+        // Clean any output buffers
         while (ob_get_level() > 0) { @ob_end_clean(); }
-        echo '';
-        exit;
+        header('Content-Length: 0');
+        exit(0);
     }
+    
+    // Set content type for actual requests
+    header('Content-Type: application/json');
 }
 
 /**
