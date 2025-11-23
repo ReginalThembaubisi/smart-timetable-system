@@ -49,13 +49,38 @@ function sendJSONResponse($success, $data = null, $message = '', $statusCode = 2
 function setCORSHeaders() {
     header('Content-Type: application/json');
     
-    // Get allowed origins from config or use default
+    // Get the origin from the request
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    
+    // Get allowed origins from config or use default (allow all Railway domains)
     $allowedOrigins = defined('API_ALLOWED_ORIGINS') ? API_ALLOWED_ORIGINS : '*';
     
-    if ($allowedOrigins === '*') {
-        header('Access-Control-Allow-Origin: *');
+    // If using credentials, we must specify exact origin, not '*'
+    // Allow all Railway domains and common development origins
+    $railwayDomains = [
+        'web-production-ffbb.up.railway.app',
+        'web-production-f8792.up.railway.app',
+    ];
+    
+    if ($allowedOrigins === '*' || empty($allowedOrigins)) {
+        // Check if it's a Railway domain or allow if no origin (direct access)
+        if (empty($origin)) {
+            header('Access-Control-Allow-Origin: *');
+        } else {
+            $isRailway = false;
+            foreach ($railwayDomains as $domain) {
+                if (strpos($origin, $domain) !== false) {
+                    $isRailway = true;
+                    break;
+                }
+            }
+            if ($isRailway || strpos($origin, 'localhost') !== false || strpos($origin, '127.0.0.1') !== false) {
+                header("Access-Control-Allow-Origin: $origin");
+            } else {
+                header('Access-Control-Allow-Origin: *');
+            }
+        }
     } else {
-        $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
         $allowed = explode(',', $allowedOrigins);
         if (in_array($origin, $allowed)) {
             header("Access-Control-Allow-Origin: $origin");
@@ -63,8 +88,11 @@ function setCORSHeaders() {
     }
     
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization');
-    header('Access-Control-Allow-Credentials: true');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, Accept');
+    // Only set credentials if we're using a specific origin (not '*')
+    if (!empty($origin) && $origin !== '*') {
+        header('Access-Control-Allow-Credentials: true');
+    }
     
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
         http_response_code(200);
