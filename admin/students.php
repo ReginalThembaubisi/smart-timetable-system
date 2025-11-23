@@ -709,22 +709,49 @@ include 'header_modern.php';
                     
                     // Build checkbox list grouped by year
                     if (totalModules === 0) {
-                        // No modules linked - show helpful message with options
+                        // No modules linked - show ALL modules with a note that they'll be auto-linked
                         const yearsText = selectedYears.sort((a,b) => a-b).map(y => `Year ${y}`).join(', ');
-                        container.innerHTML = `
-                            <div style="padding: 20px; text-align: center; background: rgba(241, 196, 15, 0.1); border: 1px solid rgba(241, 196, 15, 0.3); border-radius: 8px;">
-                                <p style="color: rgba(241, 196, 15, 0.9); font-size: 14px; margin: 0 0 12px 0; font-weight: 500;">
+                        let html = `
+                            <div style="padding: 16px; margin-bottom: 16px; background: rgba(241, 196, 15, 0.1); border: 1px solid rgba(241, 196, 15, 0.3); border-radius: 8px;">
+                                <p style="color: rgba(241, 196, 15, 0.9); font-size: 13px; margin: 0 0 8px 0; font-weight: 500;">
                                     ⚠️ No modules are linked to this program for ${yearsText}
                                 </p>
-                                <p style="color: rgba(255,255,255,0.6); font-size: 12px; margin: 0 0 16px 0;">
-                                    To see modules here, they need to be linked to this program and year level first.
+                                <p style="color: rgba(255,255,255,0.7); font-size: 12px; margin: 0;">
+                                    Showing all available modules below. Selected modules will be automatically linked to this program and year level.
                                 </p>
-                                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                                    <a href="../timetable_pdf_parser.php" target="_blank" style="padding: 8px 16px; background: rgba(102, 126, 234, 0.2); color: #667eea; border: 1px solid rgba(102, 126, 234, 0.4); border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 500;">📤 Upload Timetable</a>
-                                    <a href="modules.php" target="_blank" style="padding: 8px 16px; background: rgba(102, 126, 234, 0.2); color: #667eea; border: 1px solid rgba(102, 126, 234, 0.4); border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 500;">🔗 Link Modules</a>
-                                </div>
                             </div>
+                            <div style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; padding: 5px;">
                         `;
+                        
+                        // Show all modules since none are linked
+                        allModulesData.forEach(module => {
+                            const moduleCode = escapeHtml((module.module_code || '').trim());
+                            let moduleName = escapeHtml((module.module_name || '').trim());
+                            
+                            if (!moduleName || moduleName === moduleCode || moduleName.toLowerCase() === moduleCode.toLowerCase()) {
+                                moduleName = '';
+                            }
+                            
+                            let displayText = moduleCode;
+                            if (moduleName) {
+                                displayText += ' - ' + moduleName;
+                            }
+                            if (module.credits) {
+                                displayText += ` (${module.credits} credits)`;
+                            }
+                            
+                            html += `
+                                <label style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(102, 126, 234, 0.12)'; this.style.borderColor='rgba(102, 126, 234, 0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'; this.style.borderColor='rgba(255,255,255,0.06)'">
+                                    <input type="checkbox" name="modules[]" value="${module.module_id}" style="cursor: pointer; width: 18px; height: 18px; flex-shrink: 0;">
+                                    <span style="color: rgba(255,255,255,0.9); font-size: 13px; line-height: 1.4; flex: 1;">
+                                        ${displayText}
+                                    </span>
+                                </label>
+                            `;
+                        });
+                        
+                        html += '</div>';
+                        container.innerHTML = html;
                     } else {
                         let html = '<div style="display: flex; flex-direction: column; gap: 16px; max-height: 400px; overflow-y: auto; padding: 5px;">';
                         
