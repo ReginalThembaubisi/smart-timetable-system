@@ -13,6 +13,7 @@ class ApiService {
   // Alternative URLs to try if main one fails
   static const List<String> _fallbackUrls = [
     AppConfig.apiBaseUrl,
+    AppConfig.apiBaseUrlRailway,
     AppConfig.apiBaseUrlEmulator,
     AppConfig.apiBaseUrlWithPort,
     AppConfig.apiBaseUrlLocalhost,

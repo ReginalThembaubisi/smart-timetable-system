@@ -1,16 +1,17 @@
 class AppConfig {
-  // Network configurations - CHOOSE ONE BASED ON YOUR SETUP
-  
-  // Network configurations - Updated for XAMPP setup
-  // API files are in the admin folder (C:\xampp\htdocs\admin\)
-  // XAMPP default port is 80, so no port number needed
-  // Since XAMPP serves from htdocs as document root, we need /admin path
-  static const String apiBaseUrl = 'http://localhost/admin';
-  
+  // Network configurations: prefer API_BASE_URL from --dart-define / environment variable.
+  // Default to Railway production URL
+  static const String apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://web-production-f8792.up.railway.app/admin',
+  );
+
   // Fallback URLs (used automatically by ApiService)
   static const String apiBaseUrlWithPort = 'http://127.0.0.1/admin';
   static const String apiBaseUrlEmulator = 'http://10.0.2.2/admin';
   static const String apiBaseUrlLocalhost = 'http://localhost/admin';
+  // Railway production URL as fallback
+  static const String apiBaseUrlRailway = 'https://web-production-f8792.up.railway.app/admin';
   
   // Other app configuration constants can be added here
   static const String appName = 'Smart Timetable';
