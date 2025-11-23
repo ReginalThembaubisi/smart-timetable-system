@@ -41,15 +41,43 @@ try {
     // Ignore if not supported
 }
 
+// Check if database already has data (if students table exists and has rows, skip setup)
+try {
+    $checkStmt = $pdo->query("SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'students'");
+    $tableExists = $checkStmt->fetch(PDO::FETCH_ASSOC)['count'] > 0;
+    
+    if ($tableExists) {
+        $rowCountStmt = $pdo->query("SELECT COUNT(*) as count FROM students");
+        $rowCount = $rowCountStmt->fetch(PDO::FETCH_ASSOC)['count'];
+        
+        if ($rowCount > 0) {
+            fwrite(STDOUT, "Database already exists with data ({$rowCount} students). Skipping setup to preserve data.\n");
+            exit(0);
+        }
+    }
+} catch (PDOException $e) {
+    // Table doesn't exist, continue with setup
+}
+
 // Sanitize the file: remove CREATE DATABASE/USE lines and strip standalone comment lines.
 $sql = preg_replace('/CREATE DATABASE.*?;(\s?)/i', '', $sql);
 $sql = preg_replace('/USE\s+\S+;(\s?)/i', '', $sql);
 $sql = preg_replace('/^\s*--.*$/m', '', $sql);
 
+// Convert DROP TABLE to DROP TABLE IF EXISTS (safer)
+$sql = preg_replace('/DROP TABLE\s+IF\s+NOT\s+EXISTS/i', 'DROP TABLE IF EXISTS', $sql);
+$sql = preg_replace('/DROP TABLE\s+(?!IF\s+EXISTS)(\w+)/i', 'DROP TABLE IF EXISTS $1', $sql);
+
+// Convert CREATE TABLE to CREATE TABLE IF NOT EXISTS (idempotent)
+$sql = preg_replace('/CREATE TABLE\s+(?!IF\s+NOT\s+EXISTS)(\w+)/i', 'CREATE TABLE IF NOT EXISTS $1', $sql);
+
+// Skip INSERT statements - only create schema, don't insert seed data
+$sql = preg_replace('/INSERT\s+INTO.*?;/is', '', $sql);
+
 $statements = array_filter(array_map('trim', explode(';', $sql)));
 $executed = 0;
 foreach ($statements as $statement) {
-    if ($statement === '') {
+    if ($statement === '' || trim($statement) === '') {
         continue;
     }
 
