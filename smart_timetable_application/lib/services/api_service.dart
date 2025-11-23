@@ -135,8 +135,11 @@ class ApiService {
       debugPrint('Login response status: ${response.statusCode}');
       debugPrint('Login response body: ${response.body}');
 
+      // Try to parse response body regardless of status code
+      // Many APIs return JSON error messages even with non-200 status codes
+      final decoded = _safeDecodeJsonObject(response.body);
+      
       if (response.statusCode == 200) {
-        final decoded = _safeDecodeJsonObject(response.body);
         if (decoded != null) {
           debugPrint('Login response decoded successfully: $decoded');
           return decoded;
@@ -148,10 +151,20 @@ class ApiService {
           };
         }
       } else {
-        return {
-          'success': false,
-          'message': 'Server error: ${response.statusCode}',
-        };
+        // For non-200 status codes, try to extract the error message from the response
+        if (decoded != null && decoded['message'] != null) {
+          debugPrint('Login error response decoded: $decoded');
+          return {
+            'success': false,
+            'message': decoded['message'].toString(),
+          };
+        } else {
+          // Fallback to generic error message
+          return {
+            'success': false,
+            'message': 'Server error: ${response.statusCode}',
+          };
+        }
       }
     } catch (e) {
       debugPrint('Login error: $e');
