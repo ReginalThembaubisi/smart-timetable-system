@@ -17,6 +17,3 @@ if (!defined('API_ALLOWED_ORIGINS')) {
 		define('API_ALLOWED_ORIGINS', $origins);
 	}
 }
-?>
-
-
