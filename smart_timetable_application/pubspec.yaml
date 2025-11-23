@@ -2,7 +2,7 @@ name: smart_timetable_application
 description: "A smart timetable application with AI-powered study session suggestions and advanced analytics."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
