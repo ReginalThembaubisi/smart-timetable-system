@@ -35,4 +35,3 @@ flutter build web --release --dart-define=API_BASE_URL="$API_BASE_URL_VAR"
 
 echo "--- Flutter web build completed ---"
 echo "Build output: $(pwd)/build/web"
-HARDCODED_URL_CHECK
