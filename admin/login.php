@@ -24,14 +24,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = $_POST['username'] ?? '';
     $password = $_POST['password'] ?? '';
     
-    // Default admin credentials (change these!)
-    if ($username === 'admin' && $password === 'admin123') {
-        $_SESSION['admin_logged_in'] = true;
-        $_SESSION['admin_username'] = $username;
-        header('Location: index.php');
-        exit;
-    } else {
-        $error = 'Invalid username or password';
+    try {
+        require_once __DIR__ . '/config.php';
+        require_once __DIR__ . '/../includes/database.php';
+        $pdo = Database::getInstance()->getConnection();
+        
+        // Ensure admins table exists (for first-time setup)
+        $pdo->exec("CREATE TABLE IF NOT EXISTS admins (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(255) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            email VARCHAR(255),
+            full_name VARCHAR(255),
+            is_active TINYINT(1) DEFAULT 1,
+            last_login TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_username (username),
+            INDEX idx_is_active (is_active)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        
+        // Check database for admin credentials
+        $stmt = $pdo->prepare("SELECT id, username, password_hash, is_active, full_name, email 
+                               FROM admins 
+                               WHERE username = ? AND is_active = 1");
+        $stmt->execute([$username]);
+        $admin = $stmt->fetch();
+        
+        if ($admin && password_verify($password, $admin['password_hash'])) {
+            // Valid credentials - update last login
+            $updateStmt = $pdo->prepare("UPDATE admins SET last_login = CURRENT_TIMESTAMP WHERE id = ?");
+            $updateStmt->execute([$admin['id']]);
+            
+            // Set session variables
+            $_SESSION['admin_logged_in'] = true;
+            $_SESSION['admin_username'] = $admin['username'];
+            $_SESSION['admin_id'] = $admin['id'];
+            $_SESSION['admin_full_name'] = $admin['full_name'] ?? $admin['username'];
+            
+            header('Location: index.php');
+            exit;
+        } else {
+            $error = 'Invalid username or password';
+        }
+    } catch (Throwable $e) {
+        error_log("Admin login error: " . $e->getMessage());
+        $error = 'Login failed. Please try again later.';
     }
 }
 

@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS students;
 DROP TABLE IF EXISTS modules;
 DROP TABLE IF EXISTS lecturers;
 DROP TABLE IF EXISTS venues;
+DROP TABLE IF EXISTS admins;
 
 -- Create students table
 CREATE TABLE students (
@@ -118,6 +119,21 @@ CREATE TABLE exam_notifications (
     FOREIGN KEY (exam_id) REFERENCES exams(exam_id) ON DELETE CASCADE,
     INDEX idx_student_id (student_id),
     INDEX idx_is_read (is_read)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Create admins table for secure admin authentication
+CREATE TABLE admins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    full_name VARCHAR(255),
+    is_active TINYINT(1) DEFAULT 1,
+    last_login TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_username (username),
+    INDEX idx_is_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Insert sample data (optional - you can remove this section if you want to start fresh)
