@@ -1,142 +1,223 @@
 # Smart Timetable Management System
 
-A timetable management system I built for my university project. It includes a Flutter mobile app for students and a PHP web interface for administrators to manage everything.
+A comprehensive timetable management system designed for universities. This project consists of two main applications:
 
-## What This Does
+1. **Admin Web Panel** - PHP-based web interface for administrators to manage schedules, students, modules, and exams
+2. **Student Mobile App** - Flutter mobile application for students to view timetables, track study sessions, and manage their academic schedule
 
-Basically, it's a system that helps universities manage class schedules. Students can view their timetables on their phones, and admins can create schedules, manage modules, and handle all the admin stuff through a web interface.
+## 🚀 Live Demo
 
-## Features
+Try the applications online:
 
-### For Students (Mobile App)
-- Login with student number and password
-- View your daily and weekly timetable
-- See all your enrolled modules
-- Create and track study sessions
-- Built-in study timer
-- Check exam schedules and get notifications
-- Works offline once you've loaded your data
+- **Admin Panel (Web):** [https://web-production-f8792.up.railway.app/](https://web-production-f8792.up.railway.app/)
+  - Login required for administrators
+  - Manage students, modules, lecturers, venues, and schedules
+  
+- **Flutter App (Web):** [https://web-production-ffbb.up.railway.app/](https://web-production-ffbb.up.railway.app/)
+  - Student login with student number and password
+  - View timetables and manage study plans
 
-### For Admins (Web Interface)
-- Manage students - add, edit, view all student info
-- Manage modules - create courses, assign to programs
-- Manage lecturers - add lecturer details
-- Manage venues - add classrooms and locations
-- Create timetables - schedule classes, assign lecturers and venues
-- Manage exams - schedule exams and send notifications
-- Bulk import/export - handle large amounts of data at once
-- Search and filter - find anything quickly
+## 📦 Repository
 
-## Tech Stack
+- **GitHub:** [https://github.com/ReginalThembaubisi/smart-timetable-system](https://github.com/ReginalThembaubisi/smart-timetable-system)
+  - View source code
+  - Report issues
+  - Contribute to the project
 
-**Frontend:**
-- Flutter (for the mobile app)
-- Dart
+## 📋 Overview
 
-**Backend:**
-- PHP
-- MySQL
-- REST APIs for communication between app and server
+This system helps universities efficiently manage class schedules and academic information. Students can access their personalized timetables on mobile devices, while administrators use a web-based interface to create schedules, manage resources, and handle all administrative tasks.
 
-**Tools:**
-- XAMPP for local development
-- Composer for PHP packages
-- PDO for database stuff
+## ✨ Features
 
-## Project Structure
+### 📱 For Students (Mobile App)
+- **Secure Login** - Authenticate with student number and password
+- **Timetable View** - Access daily and weekly class schedules
+- **Module Management** - View all enrolled modules and course details
+- **Study Planning** - Create and track personalized study sessions
+- **Study Timer** - Built-in timer to track study time
+- **Exam Schedules** - View upcoming exams and receive notifications
+- **Offline Support** - Access data offline after initial sync
 
-The backend PHP files are in the admin folder, and the Flutter mobile app is in a separate folder. The admin folder has all the API endpoints, database connection files, and the web interface for managing everything.
+### 🖥️ For Administrators (Web Interface)
+- **Student Management** - Add, edit, and view all student information
+- **Module Management** - Create courses and assign them to programs
+- **Lecturer Management** - Add and manage lecturer details
+- **Venue Management** - Add classrooms and location information
+- **Schedule Creation** - Create timetables, assign lecturers and venues
+- **Exam Management** - Schedule exams and send notifications to students
+- **Bulk Operations** - Import/export large amounts of data efficiently
+- **Search & Filter** - Quickly find any information in the system
 
-## Setup
+## 🛠️ Tech Stack
 
-**What you need:**
-- XAMPP (with PHP and MySQL)
-- Flutter installed
-- Android Studio or VS Code
-- Composer (for PHP stuff)
+### Frontend
+- **Flutter** - Cross-platform mobile app framework
+- **Dart** - Programming language for Flutter
 
-**Getting it running:**
+### Backend
+- **PHP** - Server-side scripting language
+- **MySQL** - Relational database management system
+- **REST APIs** - Communication between mobile app and server
 
-1. **Database:**
-   - Open phpMyAdmin
-   - Import `database_setup.sql` to create all the tables
+### Development Tools
+- **XAMPP** - Local development environment (Apache, MySQL, PHP)
+- **Composer** - PHP dependency manager
+- **PDO** - PHP Data Objects for database access
 
-2. **Backend:**
-   - Put the admin folder in your XAMPP htdocs
-   - Update database settings in `admin/config.php` (usually just leave it as default for XAMPP)
-   - Run `composer install` if needed
+## 📁 Project Structure
 
-3. **Mobile App:**
-   - Open the Flutter project in Android Studio
-   - Run `flutter pub get`
-   - Update the API URL in `lib/config/app_config.dart`:
-     - For emulator: `http://10.0.2.2/admin`
-     - For real phone: `http://YOUR_COMPUTER_IP/admin`
-   - Run the app
+```
+smart-timetable-system/
+├── admin/                    # Backend PHP files and web interface
+│   ├── config.php           # Database configuration
+│   ├── api/                 # API endpoints for mobile app
+│   └── ...                  # Admin web interface files
+└── smart_timetable_application/  # Flutter mobile app
+    ├── lib/
+    │   ├── config/          # App configuration
+    │   ├── models/          # Data models
+    │   ├── screens/         # App screens
+    │   └── services/        # API services
+    └── ...
+```
 
-## API Endpoints
+## 🚀 Quick Start Guide
 
-The mobile app talks to these PHP files:
+### Prerequisites
 
-**Login:**
-- `student_login_api.php` - Students log in here
+Before you begin, ensure you have the following installed:
+- **XAMPP** (includes Apache, MySQL, and PHP)
+- **Flutter SDK** (latest stable version)
+- **Android Studio** or **VS Code** (with Flutter extensions)
+- **Composer** (PHP package manager)
+- **Git** (for cloning the repository)
 
-**Timetable:**
-- `get_student_timetable.php?student_id=X` - Gets a student's class schedule
-- `get_student_exam_timetable.php?student_id=X` - Gets exam schedule
+### Installation Steps
 
-**Modules:**
-- `student_modules_api.php?student_id=X` - Gets modules a student is enrolled in
-- `fetch_all_modules.php` - Gets all available modules
+#### 1. Database Setup
+1. Start XAMPP and ensure MySQL is running
+2. Open phpMyAdmin (usually at `http://localhost/phpmyadmin`)
+3. Create a new database or use existing one
+4. Import the `database_setup.sql` file to create all required tables
+   - File location: [`database_setup.sql`](https://github.com/ReginalThembaubisi/smart-timetable-system/blob/main/admin/database_setup.sql)
+   - Or use the file in the repository root: `admin/database_setup.sql`
 
-**Profile:**
-- `update_student_profile.php` - Update student info
-- `change_password_api.php` - Change password
+#### 2. Backend Setup (Admin Panel)
+1. Copy the `admin` folder to your XAMPP `htdocs` directory
+   - Default path: `C:\xampp\htdocs\admin`
+2. Open `admin/config.php` and verify database settings:
+   ```php
+   // Default XAMPP settings usually work:
+   // Host: localhost
+   // Username: root
+   // Password: (empty)
+   // Database: smart_timetable
+   ```
+3. Install PHP dependencies (if any):
+   ```bash
+   cd admin
+   composer install
+   ```
+4. Access the admin panel at: `http://localhost/admin`
 
-## Database
+#### 3. Mobile App Setup (Flutter)
+1. Open the Flutter project in Android Studio or VS Code
+2. Install dependencies:
+   ```bash
+   flutter pub get
+   ```
+3. Configure API endpoint in `lib/config/app_config.dart`:
+   ```dart
+   // For Android Emulator:
+   static const String apiBaseUrl = 'http://10.0.2.2/admin';
+   
+   // For Physical Device (replace with your computer's IP):
+   static const String apiBaseUrl = 'http://192.168.1.XXX/admin';
+   
+   // For Web:
+   static const String apiBaseUrl = 'http://localhost/admin';
+   ```
+4. Run the app:
+   ```bash
+   flutter run
+   ```
 
-Main tables in the database:
-- students - stores student info
-- modules - course modules
-- sessions - class timetable entries
-- lecturers - lecturer details
-- venues - classrooms and locations
-- exams - exam schedules
-- student_modules - links students to their enrolled modules
+## 🔌 API Endpoints
 
-## About This Project
+The Flutter mobile app communicates with the backend through these REST API endpoints:
 
-I built this for my ICT Application Development course at University of Mpumalanga. It was a good way to learn full-stack development - I got to work with databases, APIs, and mobile app development all in one project.
+### Authentication
+- `POST student_login_api.php` - Student login authentication
 
-## Screenshots
+### Timetable
+- `GET get_student_timetable.php?student_id={id}` - Retrieve student's class schedule
+- `GET get_student_exam_timetable.php?student_id={id}` - Retrieve exam schedule
 
-### Admin Interface
+### Modules
+- `GET student_modules_api.php?student_id={id}` - Get modules enrolled by student
+- `GET fetch_all_modules.php` - Get all available modules in the system
 
-![Admin Dashboard](screenshots/admin-1.png)
-![Admin Timetable](screenshots/admin-2.png)
-![Admin Modules](screenshots/admin-3.png)
-![Admin Students](screenshots/admin-4.png)
-![Admin Exams](screenshots/admin-5.png)
+### Profile Management
+- `POST update_student_profile.php` - Update student information
+- `POST change_password_api.php` - Change student password
 
-### Student Mobile App
+> **Note:** Replace `{id}` with the actual student ID in the URL parameters.
 
-![App Home](screenshots/app-1.png)
-![Timetable View](screenshots/app-2.png)
-![Study Sessions](screenshots/app-3.png)
-![Modules](screenshots/app-4.png)
-![Exam Schedule](screenshots/app-5.png)
-![Settings](screenshots/app-6.png)
+## 🗄️ Database Schema
 
-## Author
+The system uses MySQL database with the following main tables:
+
+| Table Name | Description |
+|------------|-------------|
+| `students` | Stores student information (name, student number, contact details) |
+| `modules` | Course modules and their details |
+| `sessions` | Class timetable entries (time, day, module, lecturer, venue) |
+| `lecturers` | Lecturer information and contact details |
+| `venues` | Classroom and location information |
+| `exams` | Exam schedules and details |
+| `student_modules` | Junction table linking students to their enrolled modules |
+
+> Import `database_setup.sql` to create all tables with proper relationships and constraints.
+
+## 📖 About This Project
+
+This project was developed as part of the ICT Application Development course at the University of Mpumalanga. It demonstrates full-stack development skills including:
+
+- Database design and management
+- RESTful API development
+- Web application development (PHP)
+- Mobile application development (Flutter)
+- System integration and architecture
+
+The project showcases a complete end-to-end solution for managing university timetables, combining web and mobile technologies to serve both administrators and students.
+
+## 📸 Screenshots
+
+### Online Gallery
+View screenshots of both applications: [View Screenshots Gallery on Imgur](https://imgur.com/a/CWDSwa3)
+
+### Local Screenshots
+Screenshots are also available in the repository:
+- **Admin Panel Screenshots:** [`/screenshots/admin-*.png`](https://github.com/ReginalThembaubisi/smart-timetable-system/tree/main/admin/screenshots)
+- **Mobile App Screenshots:** [`/screenshots/app-*.png`](https://github.com/ReginalThembaubisi/smart-timetable-system/tree/main/admin/screenshots)
+
+The gallery includes:
+- Admin panel interface screenshots
+- Mobile app screenshots (timetable views, study plans, etc.)
+- Database management views
+
+## 👤 Author
 
 **Themba Ubisi**
-- GitHub: [@ReginalThembaubisi](https://github.com/ReginalThembaubisi)
+- **GitHub:** [@ReginalThembaubisi](https://github.com/ReginalThembaubisi)
+- **Repository:** [smart-timetable-system](https://github.com/ReginalThembaubisi/smart-timetable-system)
 
-## License
+## 📄 License
 
-Educational use only.
+This project is for educational use only.
 
 ---
 
-Note: This was built for educational purposes but could be adapted for real university use.
+> **Note:** This system was built for educational purposes as part of a university course project. It demonstrates full-stack development capabilities and could be adapted for real-world university use with additional security and feature enhancements.
 
