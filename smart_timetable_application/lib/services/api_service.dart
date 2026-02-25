@@ -48,7 +48,7 @@ class ApiService {
       debugPrint('Attempting to update profile for student ID: ${student.studentId}');
       
       final response = await client.post(
-        Uri.parse('$_baseUrl/update_student_profile.php'),
+        Uri.parse('$_baseUrl/api/update_student_profile.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -313,7 +313,7 @@ class ApiService {
     final client = _createClient();
     try {
       final response = await client.post(
-        Uri.parse('$_baseUrl/change_password_api.php'),
+        Uri.parse('$_baseUrl/api/change_password_api.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'student_id': studentId,
@@ -397,7 +397,7 @@ class ApiService {
     try {
       debugPrint('Fetching exam timetable for student ID: $studentId');
       final response = await client.get(
-        Uri.parse('$_baseUrl/get_student_exam_timetable.php?student_id=$studentId'),
+        Uri.parse('$_baseUrl/api/get_student_exam_timetable.php?student_id=$studentId'),
       ).timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
@@ -436,7 +436,7 @@ class ApiService {
     try {
       debugPrint('Fetching exam notifications for student ID: $studentId');
       final response = await client.get(
-        Uri.parse('$_baseUrl/get_student_exam_notifications.php?student_id=$studentId'),
+        Uri.parse('$_baseUrl/api/get_student_exam_notifications.php?student_id=$studentId'),
       ).timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
@@ -473,7 +473,7 @@ class ApiService {
     final client = _createClient();
     try {
       final response = await client.post(
-        Uri.parse('$_baseUrl/mark_notification_read.php'),
+        Uri.parse('$_baseUrl/api/mark_notification_read.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'notification_id': notificationId,
