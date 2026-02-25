@@ -34,6 +34,15 @@ Thumbs.db
 *.swo
 *~
 
+# Flutter artifacts
+smart_timetable_application/.dart_tool/
+smart_timetable_application/.flutter-plugins
+smart_timetable_application/.flutter-plugins-dependencies
+smart_timetable_application/pubspec.lock
+smart_timetable_application/build/
+smart_timetable_application/.packages
+smart_timetable_application/generated/
+
 # Helper files for GitHub upload (not needed in repo)
 BEFORE_GITHUB_CHECKLIST.md
 QUICK_GITHUB_UPLOAD.md

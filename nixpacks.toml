@@ -1,5 +1,14 @@
 [phases.setup]
-nixPkgs = ["php82", "php82Packages.composer", "mysql-client"]
+nixPkgs = [
+    "php82",
+    "php82Extensions.pdo_mysql",
+    "php82Extensions.mbstring",
+    "php82Extensions.openssl",
+    "php82Extensions.curl",
+    "php82Extensions.zip",
+    "php82Packages.composer",
+    "mysql-client"
+]
 
 [phases.install]
 cmds = ["composer install --no-dev --optimize-autoloader"]

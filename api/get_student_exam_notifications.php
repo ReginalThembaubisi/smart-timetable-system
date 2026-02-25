@@ -1,20 +1,20 @@
 <?php
-require_once __DIR__ . '/includes/api_helpers.php';
+require_once __DIR__ . '/../includes/api_helpers.php';
 
 setCORSHeaders();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    sendJSONResponse(false, null, 'Method not allowed', 405);
+	sendJSONResponse(false, null, 'Method not allowed', 405);
 }
 
 try {
-    $studentId = isset($_GET['student_id']) ? (int)$_GET['student_id'] : 0;
-    
-    if ($studentId <= 0) {
-        sendJSONResponse(false, null, 'Invalid student ID', 400);
-    }
-    
-    $pdo = getDBConnection();
+	$studentId = isset($_GET['student_id']) ? (int) $_GET['student_id'] : 0;
+
+	if ($studentId <= 0) {
+		sendJSONResponse(false, null, 'Invalid student ID', 400);
+	}
+
+	$pdo = getDBConnection();
 
 	// Ensure notifications table exists to avoid 500 on fresh setups
 	try {
@@ -34,7 +34,7 @@ try {
 	} catch (Throwable $t) {
 		// If creation fails, still continue to attempt read; worst case, return empty list
 	}
-	
+
 	try {
 		$stmt = $pdo->prepare('
 			SELECT n.*, e.exam_status
@@ -50,12 +50,10 @@ try {
 		error_log('Exam notifications query failed: ' . $pe->getMessage());
 		$notifications = [];
 	}
-    
-    sendJSONResponse(true, ['notifications' => $notifications], 'Notifications retrieved successfully');
-    
+
+	sendJSONResponse(true, ['notifications' => $notifications], 'Notifications retrieved successfully');
+
 } catch (Exception $e) {
-    handleAPIError($e, 'Failed to retrieve notifications');
+	handleAPIError($e, 'Failed to retrieve notifications');
 }
 ?>
-
-

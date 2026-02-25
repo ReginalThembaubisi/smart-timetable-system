@@ -1,30 +1,30 @@
 <?php
-require_once __DIR__ . '/includes/api_helpers.php';
+require_once __DIR__ . '/../includes/api_helpers.php';
 
 setCORSHeaders();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    sendJSONResponse(false, null, 'Method not allowed', 405);
+	sendJSONResponse(false, null, 'Method not allowed', 405);
 }
 
 try {
-    $studentId = isset($_GET['student_id']) ? (int)$_GET['student_id'] : 0;
-    
-    if ($studentId <= 0) {
-        sendJSONResponse(false, null, 'Invalid student ID', 400);
-    }
-    
-    $pdo = getDBConnection();
-    
+	$studentId = isset($_GET['student_id']) ? (int) $_GET['student_id'] : 0;
+
+	if ($studentId <= 0) {
+		sendJSONResponse(false, null, 'Invalid student ID', 400);
+	}
+
+	$pdo = getDBConnection();
+
 	// Some databases may not yet have the exam_status column; detect and select conditionally.
 	$hasExamStatus = false;
 	try {
 		$col = $pdo->query("SHOW COLUMNS FROM exams LIKE 'exam_status'")->fetch(PDO::FETCH_ASSOC);
-		$hasExamStatus = (bool)$col;
+		$hasExamStatus = (bool) $col;
 	} catch (Throwable $t) {
 		$hasExamStatus = false;
 	}
-	
+
 	$selectStatus = $hasExamStatus ? 'e.exam_status,' : '';
 	// Match exams by module_id OR by module code partial match
 	// This handles cases where student modules have combined codes like "APD302_1_S2, DICT312_1_S2"
@@ -53,16 +53,14 @@ try {
 		)
 		ORDER BY e.exam_date, e.exam_time
 	";
-	
+
 	$stmt = $pdo->prepare($sql);
-    $stmt->execute([$studentId]);
-    $exams = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    sendJSONResponse(true, ['exams' => $exams], 'Exam timetable retrieved successfully');
-    
+	$stmt->execute([$studentId]);
+	$exams = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+	sendJSONResponse(true, ['exams' => $exams], 'Exam timetable retrieved successfully');
+
 } catch (Exception $e) {
-    handleAPIError($e, 'Failed to retrieve exam timetable');
+	handleAPIError($e, 'Failed to retrieve exam timetable');
 }
 ?>
-
-
