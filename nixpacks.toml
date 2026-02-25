@@ -7,6 +7,7 @@ nixPkgs = [
     "php82Extensions.curl",
     "php82Extensions.zip",
     "php82Packages.composer",
+    "caddy",
     "mysql-client"
 ]
 
@@ -15,4 +16,4 @@ cmds = ["composer install --no-dev --optimize-autoloader"]
 
 [start]
 # Run database setup/migrations before starting the PHP server
-cmd = "php scripts/database_setup_runner.php && php -S 0.0.0.0:$PORT -t ."
+cmd = "php scripts/database_setup_runner.php && caddy run --config Caddyfile --adapter caddyfile"

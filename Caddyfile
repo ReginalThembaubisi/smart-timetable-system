@@ -1,0 +1,18 @@
+:{$PORT} {
+    root * .
+    encode zstd gzip
+    
+    # Enable PHP support
+    # Nixpacks places php-fpm socket at /tmp/php-fpm.sock by default for some versions, 
+    # but we can also use a TCP port if needed. 
+    # However, Nixpacks + PHP usually handles this.
+    # We will let Nixpacks handle the PHP-FPM setup and just use regular Caddy for static files if needed,
+    # OR we use Caddy as the main entry point.
+    
+    php_fastcgi unix//var/run/php-fpm.sock
+    
+    # Fallback to index.php for pretty URLs if needed
+    try_files {path} {path}/ /index.php?{query}
+    
+    file_server
+}
