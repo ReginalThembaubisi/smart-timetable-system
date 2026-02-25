@@ -247,33 +247,40 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Exam Timetables'),
-        backgroundColor: AppColors.primary,
+        title: const Text(
+          'Exam Timetables',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: AppColors.surface,
         foregroundColor: Colors.white,
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
+          indicatorColor: AppColors.primary,
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          unselectedLabelColor: Colors.white54,
           tabs: [
-            Tab(
-              icon: const Icon(Icons.calendar_today),
+            const Tab(
+              icon: Icon(Icons.calendar_today),
               text: 'Timetables',
             ),
             Tab(
               icon: const Icon(Icons.notifications),
               child: _notifications.isNotEmpty
                   ? Stack(
+                      clipBehavior: Clip.none,
                       children: [
-                        const Text('Notifications'),
+                        const Padding(
+                          padding: EdgeInsets.only(right: 12),
+                          child: Text('Notifications'),
+                        ),
                         Positioned(
                           right: 0,
-                          top: 0,
+                          top: -4,
                           child: Container(
-                            padding: const EdgeInsets.all(2),
+                            padding: const EdgeInsets.all(3),
                             decoration: BoxDecoration(
                               color: Colors.red,
                               borderRadius: BorderRadius.circular(10),
@@ -300,17 +307,26 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
           ],
         ),
       ),
-      body: _isLoading
-          ? _buildLoadingState()
-          : _error != null
-              ? _buildErrorWidget()
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildTimetablesTab(),
-                    _buildNotificationsTab(),
-                  ],
-                ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: AppColors.backgroundGradient,
+          ),
+        ),
+        child: _isLoading
+            ? _buildLoadingState()
+            : _error != null
+                ? _buildErrorWidget()
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildTimetablesTab(),
+                      _buildNotificationsTab(),
+                    ],
+                  ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _loadExamData,
         backgroundColor: AppColors.primary,
@@ -359,95 +375,101 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
   }
 
   Widget _buildTimetableCard(ExamTimetable timetable) {
-    return Card(
+    final isFinal = timetable.status == 'final';
+    final statusColor = isFinal ? Colors.green : Colors.orange;
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.12),
+          width: 1,
+        ),
       ),
-      child: ExpansionTile(
-        initiallyExpanded: true,
-        leading: CircleAvatar(
-          backgroundColor: timetable.status == 'final'
-              ? Colors.green
-              : Colors.orange,
-          child: Icon(
-            timetable.status == 'final'
-                ? Icons.check_circle
-                : Icons.edit,
-            color: Colors.white,
-          ),
-        ),
-        title: Text(
-          timetable.title,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (timetable.description.isNotEmpty)
-              Text(
-                timetable.description,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 12,
-                ),
-              ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(
-                  Icons.school,
-                  size: 14,
-                  color: Colors.grey[600],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  timetable.academicYear,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Icon(
-                  Icons.calendar_month,
-                  size: 14,
-                  color: Colors.grey[600],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${timetable.exams.length} exams',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                  ),
-                ),
-              ],
+      child: Theme(
+        // Override ExpansionTile divider to be transparent
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: true,
+          leading: CircleAvatar(
+            backgroundColor: statusColor.withValues(alpha: 0.2),
+            child: Icon(
+              isFinal ? Icons.check_circle : Icons.edit,
+              color: statusColor,
             ),
+          ),
+          title: Text(
+            timetable.title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: Colors.white,
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (timetable.description.isNotEmpty)
+                Text(
+                  timetable.description,
+                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.school, size: 13, color: Colors.white38),
+                  const SizedBox(width: 4),
+                  Text(timetable.academicYear,
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 12)),
+                  const SizedBox(width: 14),
+                  const Icon(Icons.quiz, size: 13, color: Colors.white38),
+                  const SizedBox(width: 4),
+                  Text('${timetable.exams.length} exam${timetable.exams.length == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 12)),
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isFinal ? 'FINAL' : 'DRAFT',
+                      style: TextStyle(
+                          color: statusColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          iconColor: Colors.white54,
+          collapsedIconColor: Colors.white38,
+          children: [
+            if (timetable.exams.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'No exams scheduled for your modules',
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              )
+            else
+              ...timetable.exams.map((exam) => Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    child: _buildExamCard(exam),
+                  )),
           ],
         ),
-        children: [
-          if (timetable.exams.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'No exams scheduled for your modules',
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            )
-          else
-            ...timetable.exams.map((exam) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: _buildExamCard(exam),
-            )),
-        ],
       ),
     );
   }
@@ -475,28 +497,62 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(exam.moduleName),
+        backgroundColor: AppColors.surface,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          exam.moduleName,
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Module: ${exam.moduleCode}'),
-            const SizedBox(height: 8),
-            Text('Date: ${_formatDate(exam.examDate)}'),
-            Text('Time: ${_formatTime(exam.startTime)} - ${_formatTime(exam.endTime)}'),
-            Text('Duration: ${exam.durationMinutes} minutes'),
-            Text('Venue: ${exam.venue}'),
-            Text('Type: ${exam.examType.toUpperCase()}'),
-            if (exam.instructions.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text('Instructions: ${exam.instructions}'),
-            ],
+            _examDetailRow(Icons.code, 'Module', exam.moduleCode),
+            _examDetailRow(Icons.calendar_today, 'Date',
+                _formatDate(exam.examDate)),
+            _examDetailRow(Icons.access_time, 'Time',
+                '${_formatTime(exam.startTime)} – ${_formatTime(exam.endTime)}'),
+            _examDetailRow(Icons.timer, 'Duration',
+                '${exam.durationMinutes} minutes'),
+            _examDetailRow(Icons.location_on, 'Venue', exam.venue),
+            _examDetailRow(Icons.category, 'Type',
+                exam.examType.toUpperCase()),
+            if (exam.instructions.isNotEmpty)
+              _examDetailRow(
+                  Icons.info_outline, 'Instructions', exam.instructions),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: const Text('Close',
+                style: TextStyle(color: AppColors.primary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _examDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Text('$label: ',
+              style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500)),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '–' : value,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -521,53 +577,67 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
   }
 
   Widget _buildNotificationCard(ExamNotification notification) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: _getNotificationColor(notification.type),
-          child: Icon(
-            _getNotificationIcon(notification.type),
-            color: Colors.white,
+    final color = _getNotificationColor(notification.type);
+    return GestureDetector(
+      onTap: () => _markNotificationAsRead(notification.notificationId),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: color.withValues(alpha: 0.3),
+            width: 1,
           ),
         ),
-        title: Text(
-          notification.title,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            const SizedBox(height: 4),
-            Text(
-              notification.message,
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
+            CircleAvatar(
+              backgroundColor: color.withValues(alpha: 0.2),
+              child: Icon(
+                _getNotificationIcon(notification.type),
+                color: color,
+                size: 20,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              _formatDateTime(notification.createdAt),
-              style: TextStyle(
-                color: Colors.grey[500],
-                fontSize: 10,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notification.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    notification.message,
+                    style: const TextStyle(
+                        color: Colors.white60, fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatDateTime(notification.createdAt),
+                    style: const TextStyle(
+                        color: Colors.white38, fontSize: 10),
+                  ),
+                ],
               ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white38, size: 18),
+              onPressed: () =>
+                  _markNotificationAsRead(notification.notificationId),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
           ],
         ),
-        trailing: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => _markNotificationAsRead(notification.notificationId),
-        ),
-        onTap: () => _markNotificationAsRead(notification.notificationId),
       ),
     );
   }

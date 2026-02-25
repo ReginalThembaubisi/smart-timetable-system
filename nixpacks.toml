@@ -1,9 +1,9 @@
 [phases.setup]
-nixPkgs = ["php82", "php82Packages.composer"]
+nixPkgs = ["php82", "php82Packages.composer", "mysql-client"]
 
 [phases.install]
 cmds = ["composer install --no-dev --optimize-autoloader"]
 
 [start]
-cmd = "php -d extension=pdo_mysql -S 0.0.0.0:$PORT -t ."
-
+# Run database setup/migrations before starting the PHP server
+cmd = "php scripts/database_setup_runner.php && php -S 0.0.0.0:$PORT -t ."

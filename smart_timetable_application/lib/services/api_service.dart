@@ -240,13 +240,29 @@ class ApiService {
 
   // Get student modules
   static Future<Map<String, dynamic>> getStudentModules(int studentId) async {
+    // Demo Mode: Return real modules provided by the user for testing
+    if (studentId == 0) {
+      await Future.delayed(const Duration(milliseconds: 800)); // Simulate network
+      return {
+        'success': true,
+        'message': 'Demo modules loaded',
+        'modules': [
+          {'module_id': 101, 'module_name': 'RESEARCH METHODOLOGY', 'module_code': '2026DICT431'},
+          {'module_id': 102, 'module_name': 'PROJECT 400', 'module_code': '2026DICT400'},
+          {'module_id': 103, 'module_name': 'HUMAN COMPUTER INTERACTION', 'module_code': '2026DICT412'},
+          {'module_id': 104, 'module_name': 'EMERGING TECHNOLOGIES', 'module_code': '2026DICT422'},
+          {'module_id': 105, 'module_name': 'CYBER SECURITY', 'module_code': '2026DICT432'},
+          {'module_id': 106, 'module_name': 'ADVANCED DATABASE', 'module_code': '2026DICT411'},
+          {'module_id': 107, 'module_name': 'ADVANCED APPLICATION DEVELOPMENT', 'module_code': '2026DICT421'},
+        ],
+      };
+    }
+
     final client = _createClient();
     try {
-      // For demo purposes, use student ID 1 if the passed ID is invalid
-      final actualStudentId = studentId > 0 ? studentId : 1;
-      debugPrint('Fetching modules for student ID: $actualStudentId');
+      debugPrint('Fetching modules for student ID: $studentId');
       final response = await client.get(
-        Uri.parse('$_baseUrl${AppConfig.modulesEndpoint}?student_id=$actualStudentId'),
+        Uri.parse('$_baseUrl${AppConfig.modulesEndpoint}?student_id=$studentId'),
       ).timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {

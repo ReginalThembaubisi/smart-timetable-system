@@ -9,7 +9,8 @@ logs/archive/
 frontend/
 archive/
 docs/
-composer.lock
+# composer.lock - Tracked for deterministic builds on Railway
+!composer.lock
 package-lock.json
 public.code-workspace
 .DS_Store

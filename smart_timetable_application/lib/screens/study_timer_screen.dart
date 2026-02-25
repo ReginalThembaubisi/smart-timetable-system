@@ -22,7 +22,11 @@ class StudyTimerScreen extends StatefulWidget {
 class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProviderStateMixin {
   late StudyTimerService _timerService;
   late AnimationController _progressController;
+  late AnimationController _ringColorController;
+  late Animation<Color?> _ringColorAnimation;
   
+  // Track the previous state to detect transitions
+  TimerState _previousState = TimerState.idle;
   TimerState _currentState = TimerState.idle;
   int _remainingSeconds = 0;
   double _progress = 0.0;
@@ -46,6 +50,18 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
+
+    _ringColorController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _ringColorAnimation = ColorTween(
+      begin: AppColors.primary,
+      end: AppColors.primary,
+    ).animate(CurvedAnimation(
+      parent: _ringColorController,
+      curve: Curves.easeInOut,
+    ));
     
     // Listen to timer updates
     _timerService.stateStream.listen((state) {
@@ -73,20 +89,33 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
     
     _timerService.progressStream.listen((data) {
       if (mounted) {
+        final newState = data['currentState'] as TimerState;
+
+        // Animate ring colour when state changes
+        if (newState != _previousState) {
+          final fromColor = _ringColorForState(_previousState);
+          final toColor = _ringColorForState(newState);
+          _ringColorAnimation = ColorTween(begin: fromColor, end: toColor)
+              .animate(CurvedAnimation(
+                  parent: _ringColorController,
+                  curve: Curves.easeInOut));
+          _ringColorController.forward(from: 0);
+          _previousState = newState;
+        }
+
         setState(() {
-          final currentState = data['currentState'] as TimerState;
           final remainingSeconds = data['remainingSeconds'] as int;
           final totalSeconds = data['totalSeconds'] as int;
           
           // Check if a session just completed (transition from focus/break to idle)
-          if (_currentState != TimerState.idle && currentState == TimerState.idle && remainingSeconds == 0) {
+          if (_currentState != TimerState.idle && newState == TimerState.idle && remainingSeconds == 0) {
             if (_currentState == TimerState.focus) {
               _completedSessions++;
               _completedPomodoros++;
             }
           }
           
-          _currentState = currentState;
+          _currentState = newState;
           _remainingSeconds = remainingSeconds;
           _progress = totalSeconds > 0 ? (totalSeconds - remainingSeconds) / totalSeconds : 0.0;
         });
@@ -104,7 +133,22 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
   void dispose() {
     _timerService.dispose();
     _progressController.dispose();
+    _ringColorController.dispose();
     super.dispose();
+  }
+
+  /// Map a [TimerState] to its corresponding ring colour.
+  Color _ringColorForState(TimerState state) {
+    switch (state) {
+      case TimerState.focus:
+        return AppColors.primary; // indigo-blue
+      case TimerState.breakTime:
+        return Colors.green;      // calming green
+      case TimerState.paused:
+        return Colors.orange;     // warm pause indicator
+      default:
+        return Colors.white38;    // idle / grey
+    }
   }
 
   @override
@@ -325,18 +369,21 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
                 ),
               ),
               
-              // Progress circle
+              // Progress circle – colour is driven by _ringColorAnimation
               AnimatedBuilder(
-                animation: _progressController,
+                animation: Listenable.merge(
+                    [_progressController, _ringColorController]),
                 builder: (context, child) {
+                  final ringColor =
+                      _ringColorAnimation.value ?? _getStateColor();
                   return SizedBox(
                     width: size,
                     height: size,
                     child: CircularProgressIndicator(
                       value: _progressController.value,
                       strokeWidth: 6,
-                      backgroundColor: Colors.transparent,
-                      valueColor: AlwaysStoppedAnimation<Color>(_getStateColor()),
+                      backgroundColor: ringColor.withValues(alpha: 0.15),
+                      valueColor: AlwaysStoppedAnimation<Color>(ringColor),
                     ),
                   );
                 },

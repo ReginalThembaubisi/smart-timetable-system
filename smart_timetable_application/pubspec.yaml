@@ -58,6 +58,12 @@ dependencies:
   share_plus: ^11.1.0
   url_launcher: ^6.2.1
   
+  # AI & Document Parsing (New)
+  file_picker: ^10.3.10
+  google_generative_ai: ^0.4.7
+  syncfusion_flutter_pdf: ^31.1.19
+  docx_to_text: ^1.0.1
+  
   # Time & Date
   # timezone: ^0.9.2
   

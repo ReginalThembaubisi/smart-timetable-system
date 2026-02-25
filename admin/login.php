@@ -14,23 +14,23 @@ if (session_status() === PHP_SESSION_NONE) {
 session_start();
 
 if (isset($_SESSION['admin_logged_in'])) {
-    header('Location: index.php');
-    exit;
+	header('Location: index.php');
+	exit;
 }
 
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = $_POST['username'] ?? '';
-    $password = $_POST['password'] ?? '';
-    
-    try {
-        require_once __DIR__ . '/config.php';
-        require_once __DIR__ . '/../includes/database.php';
-        $pdo = Database::getInstance()->getConnection();
-        
-        // Ensure admins table exists (for first-time setup)
-        $pdo->exec("CREATE TABLE IF NOT EXISTS admins (
+	$username = $_POST['username'] ?? '';
+	$password = $_POST['password'] ?? '';
+
+	try {
+		require_once __DIR__ . '/config.php';
+		require_once __DIR__ . '/../includes/database.php';
+		$pdo = Database::getInstance()->getConnection();
+
+		// Ensure admins table exists (for first-time setup)
+		$pdo->exec("CREATE TABLE IF NOT EXISTS admins (
             id INT AUTO_INCREMENT PRIMARY KEY,
             username VARCHAR(255) UNIQUE NOT NULL,
             password_hash VARCHAR(255) NOT NULL,
@@ -43,34 +43,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             INDEX idx_username (username),
             INDEX idx_is_active (is_active)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        
-        // Check database for admin credentials
-        $stmt = $pdo->prepare("SELECT id, username, password_hash, is_active, full_name, email 
+
+		// Check database for admin credentials
+		$stmt = $pdo->prepare("SELECT id, username, password_hash, is_active, full_name, email 
                                FROM admins 
                                WHERE username = ? AND is_active = 1");
-        $stmt->execute([$username]);
-        $admin = $stmt->fetch();
-        
-        if ($admin && password_verify($password, $admin['password_hash'])) {
-            // Valid credentials - update last login
-            $updateStmt = $pdo->prepare("UPDATE admins SET last_login = CURRENT_TIMESTAMP WHERE id = ?");
-            $updateStmt->execute([$admin['id']]);
-            
-            // Set session variables
-            $_SESSION['admin_logged_in'] = true;
-            $_SESSION['admin_username'] = $admin['username'];
-            $_SESSION['admin_id'] = $admin['id'];
-            $_SESSION['admin_full_name'] = $admin['full_name'] ?? $admin['username'];
-            
-            header('Location: index.php');
-            exit;
-        } else {
-            $error = 'Invalid username or password';
-        }
-    } catch (Throwable $e) {
-        error_log("Admin login error: " . $e->getMessage());
-        $error = 'Login failed. Please try again later.';
-    }
+		$stmt->execute([$username]);
+		$admin = $stmt->fetch();
+
+		if ($admin && password_verify($password, $admin['password_hash'])) {
+			// Valid credentials - update last login
+			$updateStmt = $pdo->prepare("UPDATE admins SET last_login = CURRENT_TIMESTAMP WHERE id = ?");
+			$updateStmt->execute([$admin['id']]);
+
+			// Set session variables
+			$_SESSION['admin_logged_in'] = true;
+			$_SESSION['admin_username'] = $admin['username'];
+			$_SESSION['admin_id'] = $admin['id'];
+			$_SESSION['admin_full_name'] = $admin['full_name'] ?? $admin['username'];
+
+			header('Location: index.php');
+			exit;
+		} else {
+			$error = 'Invalid username or password';
+		}
+	} catch (Throwable $e) {
+		error_log("Admin login error: " . $e->getMessage());
+		$error = 'Login failed. Please try again later.';
+	}
 }
 
 // Optional: lightweight stats for context on the welcome panel
@@ -80,8 +80,8 @@ try {
 	require_once __DIR__ . '/config.php';
 	require_once __DIR__ . '/../includes/database.php';
 	$pdo = Database::getInstance()->getConnection();
-	$stats_modules = (int)$pdo->query("SELECT COUNT(*) FROM modules")->fetchColumn();
-	$stats_sessions = (int)$pdo->query("SELECT COUNT(*) FROM sessions")->fetchColumn();
+	$stats_modules = (int) $pdo->query("SELECT COUNT(*) FROM modules")->fetchColumn();
+	$stats_sessions = (int) $pdo->query("SELECT COUNT(*) FROM sessions")->fetchColumn();
 } catch (Throwable $e) {
 	// Silently ignore; login should not fail if DB is not reachable here
 	error_log("Login page stats error: " . $e->getMessage());
@@ -89,93 +89,214 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login - Smart Timetable</title>
-	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-	<script src="https://cdn.tailwindcss.com"></script>
-	<script>
-		// Tailwind config: set Inter as the sans font
-		tailwind.config = {
-			theme: {
-				extend: {
-					fontFamily: {
-						sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Arial']
-					}
-				}
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Admin Login - Smart Timetable</title>
+	<link rel="stylesheet" href="../assets/css/theme.css">
+	<style>
+		body {
+			background: var(--bg-primary);
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.login-wrap {
+			width: 100%;
+			max-width: 900px;
+			margin: 0 auto;
+			padding: 0 16px;
+		}
+
+		.login-grid {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 24px;
+			align-items: start;
+		}
+
+		.login-card {
+			background: var(--bg-secondary);
+			border: 1px solid var(--border-color);
+			border-radius: 24px;
+			box-shadow: 0 6px 28px rgba(0, 0, 0, 0.35);
+			padding: 32px;
+		}
+
+		.login-card h1 {
+			color: var(--text-primary);
+			font-size: 22px;
+			font-weight: 600;
+			text-align: center;
+			margin: 0 0 4px 0;
+		}
+
+		.login-card .subtitle {
+			color: var(--text-muted);
+			font-size: 13px;
+			text-align: center;
+			margin: 0 0 24px 0;
+		}
+
+		.login-label {
+			display: block;
+			color: var(--text-muted);
+			font-size: 13px;
+			font-weight: 500;
+			margin-bottom: 8px;
+		}
+
+		.login-input {
+			width: 100%;
+			padding: 12px 16px;
+			background: var(--bg-primary);
+			border: 1px solid var(--border-color);
+			border-radius: 12px;
+			color: var(--text-primary);
+			font-size: 15px;
+			font-family: 'Inter', sans-serif;
+			box-sizing: border-box;
+			transition: border-color 0.2s;
+		}
+
+		.login-input:focus {
+			outline: none;
+			border-color: rgba(99, 102, 241, 0.5);
+			box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+		}
+
+		.login-input::placeholder {
+			color: rgba(161, 161, 170, 0.7);
+		}
+
+		.login-btn {
+			width: 100%;
+			padding: 13px 20px;
+			background: linear-gradient(135deg, #6366F1 0%, #585CF0 100%);
+			border: none;
+			border-radius: 12px;
+			color: #fff;
+			font-size: 15px;
+			font-weight: 600;
+			font-family: 'Inter', sans-serif;
+			cursor: pointer;
+			transition: all 0.2s;
+		}
+
+		.login-btn:hover {
+			background: linear-gradient(135deg, #7C83FF 0%, #6366F1 100%);
+			transform: translateY(-1px);
+		}
+
+		.login-btn:disabled {
+			opacity: 0.65;
+			cursor: not-allowed;
+		}
+
+		.stat-pill {
+			border-radius: 999px;
+			border: 1px solid var(--border-color);
+			background: var(--bg-primary);
+			color: var(--text-muted);
+			padding: 8px 16px;
+			font-size: 13px;
+			display: inline-block;
+		}
+
+		.stat-pill strong {
+			color: var(--text-primary);
+			margin-right: 4px;
+		}
+
+		.login-link {
+			color: var(--text-muted);
+			font-size: 13px;
+			text-decoration: none;
+			transition: color 0.2s;
+		}
+
+		.login-link:hover {
+			color: var(--text-primary);
+		}
+
+		@media (max-width: 640px) {
+			.login-grid {
+				grid-template-columns: 1fr;
 			}
-		};
-	</script>
+		}
+	</style>
 </head>
-<body class="bg-[#0B0B0F] min-h-screen flex items-center justify-center font-sans antialiased">
-	<div class="w-full max-w-4xl mx-auto px-4">
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+
+<body>
+	<div class="login-wrap">
+		<div class="login-grid">
 			<!-- Welcome panel -->
-			<div class="p-2 md:p-3">
-				<div class="mb-4 flex items-center gap-3">
-					<div class="h-10 w-10 rounded-xl bg-gradient-to-br from-[#6366F1] to-[#585CF0] ring-1 ring-white/10 shadow-[0_6px_20px_rgba(88,92,240,0.35)]"></div>
-					<span class="text-[#A1A1AA] text-xs tracking-wide uppercase">Smart Timetable</span>
-				</div>
-				<h2 class="text-[#E4E4E7] text-[26px] font-semibold tracking-tight leading-tight">Design. Control. Clarity.</h2>
-				<p class="text-[#A1A1AA] text-[13px] mt-2 max-w-md">Welcome, Administrator. Sign in to orchestrate schedules with precision and consistency.</p>
-				<div class="mt-5 flex flex-wrap items-center gap-3">
-					<div class="rounded-full border border-[#1F1F25] bg-[#0B0B0F] text-[#A1A1AA] px-4 py-2 text-[13px]">
-						<strong class="text-[#E4E4E7] mr-1"><?= htmlspecialchars((string)$stats_modules) ?></strong> Modules
+			<div style="padding: 8px;">
+				<div style="margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+					<div
+						style="height: 40px; width: 40px; border-radius: 12px; background: linear-gradient(135deg, #6366F1, #585CF0); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 6px 20px rgba(88,92,240,0.35);">
 					</div>
-					<div class="rounded-full border border-[#1F1F25] bg-[#0B0B0F] text-[#A1A1AA] px-4 py-2 text-[13px]">
-						<strong class="text-[#E4E4E7] mr-1"><?= htmlspecialchars((string)$stats_sessions) ?></strong> Sessions
-					</div>
+					<span
+						style="color: var(--text-muted); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;">Smart
+						Timetable</span>
 				</div>
-				<div class="mt-6 grid gap-2">
-					<div class="text-[#A1A1AA] text-[13px]">• Secure access to analytics, data, and operational tools.</div>
-					<div class="text-[#A1A1AA] text-[13px]">• Manage students, modules, sessions, and exams seamlessly.</div>
+				<h2
+					style="color: var(--text-primary); font-size: 26px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.3; margin: 0 0 8px 0;">
+					Design. Control. Clarity.</h2>
+				<p style="color: var(--text-muted); font-size: 13px; margin: 0 0 20px 0; max-width: 360px;">Welcome,
+					Administrator. Sign in to orchestrate schedules with precision and consistency.</p>
+				<div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px;">
+					<span class="stat-pill"><strong><?= htmlspecialchars((string) $stats_modules) ?></strong>
+						Modules</span>
+					<span class="stat-pill"><strong><?= htmlspecialchars((string) $stats_sessions) ?></strong>
+						Sessions</span>
+				</div>
+				<div style="display: grid; gap: 8px;">
+					<div style="color: var(--text-muted); font-size: 13px;">• Secure access to analytics, data, and
+						operational tools.</div>
+					<div style="color: var(--text-muted); font-size: 13px;">• Manage students, modules, sessions, and
+						exams seamlessly.</div>
 				</div>
 			</div>
 			<!-- Login card -->
-			<div class="bg-[#111115] border border-[#1F1F25] rounded-2xl shadow-[0_6px_28px_rgba(0,0,0,0.35)] p-8">
-				<div class="text-center mb-7">
-					<h1 class="text-[#E4E4E7] text-[22px] leading-tight font-semibold tracking-tight">Welcome back</h1>
-					<p class="text-[#A1A1AA] text-[13px] mt-1">Sign in to Smart Timetable</p>
-				</div>
+			<div class="login-card">
+				<h1>Welcome back</h1>
+				<p class="subtitle">Sign in to Smart Timetable</p>
 				<?php if ($error): ?>
-					<div class="mb-5 rounded-xl border border-[#1F1F25] bg-[#141419] text-[#E4E4E7] px-4 py-3 text-[13px]">
+					<div class="alert alert-error" style="margin-bottom: 20px;">
 						<?= htmlspecialchars($error) ?>
 					</div>
 				<?php endif; ?>
-				<form method="POST" id="loginForm" class="space-y-4">
+				<form method="POST" id="loginForm" style="display: grid; gap: 16px;">
 					<div>
-						<label class="block text-[#A1A1AA] text-[13px] font-medium mb-2">Username</label>
-						<input class="w-full rounded-xl border border-[#1F1F25] bg-[#0B0B0F] px-4 py-3 text-[15px] text-[#E4E4E7] placeholder-[#A1A1AA]/70 focus:outline-none focus:ring-2 focus:ring-[rgba(99,102,241,0.25)]"
-							type="text" name="username" placeholder="Enter your username" required autofocus>
+						<label class="login-label">Username</label>
+						<input class="login-input" type="text" name="username" placeholder="Enter your username"
+							required autofocus>
 					</div>
 					<div>
-						<label class="block text-[#A1A1AA] text-[13px] font-medium mb-2">Password</label>
-						<input class="w-full rounded-xl border border-[#1F1F25] bg-[#0B0B0F] px-4 py-3 text-[15px] text-[#E4E4E7] placeholder-[#A1A1AA]/70 focus:outline-none focus:ring-2 focus:ring-[rgba(99,102,241,0.25)]"
-							type="password" name="password" placeholder="Enter your password" required>
+						<label class="login-label">Password</label>
+						<input class="login-input" type="password" name="password" placeholder="Enter your password"
+							required>
 					</div>
-					<button type="submit"
-						class="w-full rounded-xl px-4 py-3 bg-[#6366F1] text-white hover:bg-[#585CF0] transition-all text-[15px] font-medium">
-						Login
-					</button>
+					<button type="submit" id="loginBtn" class="login-btn">Login</button>
 				</form>
-				<div class="mt-4 text-center">
-					<a href="register.php" class="text-[#A1A1AA] text-[13px] hover:text-white transition-colors">Need an admin account? Request access</a>
+				<div style="margin-top: 16px; text-align: center;">
+					<a href="register.php" class="login-link">Need an admin account? Request access</a>
 				</div>
 			</div>
 		</div>
 	</div>
-    <script>
-		document.getElementById('loginForm').addEventListener('submit', function() {
-			const btn = this.querySelector('button[type="submit"]');
+	<script>
+		document.getElementById('loginForm').addEventListener('submit', function () {
+			const btn = document.getElementById('loginBtn');
 			btn.textContent = 'Logging in...';
 			btn.disabled = true;
-			btn.classList.add('opacity-70','cursor-not-allowed');
+			btn.style.opacity = '0.7';
 		});
-    </script>
+	</script>
 </body>
+
 </html>
-
-

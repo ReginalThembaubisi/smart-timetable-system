@@ -12,18 +12,34 @@ require_once __DIR__ . '/../includes/helpers.php';
 // Deletions are locked for data integrity
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Handle delete
+    if (isset($_POST['delete_module_id'])) {
+        try {
+            $pdo = \Database::getInstance()->getConnection();
+            $stmt = $pdo->prepare('DELETE FROM modules WHERE module_id = ?');
+            $stmt->execute([(int) $_POST['delete_module_id']]);
+            $_SESSION['success_message'] = 'Module deleted.';
+            logActivity('module_deleted', 'Module ID: ' . (int) $_POST['delete_module_id'], getCurrentUserId());
+        } catch (Exception $e) {
+            logError($e, 'Deleting module');
+            $_SESSION['error_message'] = getErrorMessage($e, 'Deleting module');
+        }
+        header('Location: modules.php');
+        exit;
+    }
+
+    // Handle add/edit
     try {
-        // Credits default to 0 if not provided (not essential for this system)
-        $credits = isset($_POST['credits']) && $_POST['credits'] !== '' ? (int)$_POST['credits'] : 0;
-        $_POST['credits'] = $credits; // Ensure it's set for handleFormSubmission
-        
+        $credits = isset($_POST['credits']) && $_POST['credits'] !== '' ? (int) $_POST['credits'] : 0;
+        $_POST['credits'] = $credits;
+
         $result = handleFormSubmission(
             'modules',
             ['module_code', 'module_name', 'credits'],
             'module_code',
             isset($_POST['module_id']) && $_POST['module_id'] ? 'Module updated successfully' : 'Module added successfully'
         );
-        
+
         if ($result['success']) {
             $_SESSION['success_message'] = $result['message'];
             if (isset($result['id'])) {
@@ -44,7 +60,7 @@ try {
     $modules = getAllRecords('modules', 'module_code');
     $editModule = null;
     if (isset($_GET['edit'])) {
-        $editModule = getRecordById('modules', (int)$_GET['edit']);
+        $editModule = getRecordById('modules', (int) $_GET['edit']);
     }
 } catch (Exception $e) {
     logError($e, 'Loading modules');
@@ -64,78 +80,185 @@ $page_actions = [];
 include 'header_modern.php';
 ?>
 
-            <?php if (isset($_SESSION['success_message'])): ?>
-                <div class="alert alert-success">
-                    <?= htmlspecialchars($_SESSION['success_message']) ?>
-                </div>
-                <?php unset($_SESSION['success_message']); ?>
-            <?php endif; ?>
-            
-            <?php if (isset($_SESSION['error_message'])): ?>
-                <div class="alert alert-error">
-                    <?= htmlspecialchars($_SESSION['error_message']) ?>
-                </div>
-                <?php unset($_SESSION['error_message']); ?>
-            <?php endif; ?>
-            
-            <!-- Info banner: Modules are auto-created from timetable uploads -->
-            <div class="content-card" style="margin-bottom: 24px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 16px; padding: 20px 24px; backdrop-filter: blur(10px);">
-                <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-                    <div style="width: 40px; height: 40px; background: rgba(59, 130, 246, 0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(59, 130, 246, 0.3);">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:20px;height:20px; color: #93c5fd; flex-shrink: 0;">
-                            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-                        </svg>
-                    </div>
-                    <div style="flex: 1; min-width: 200px;">
-                        <strong style="color: #e8edff; font-size: 15px; font-weight: 700; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: block; margin-bottom: 4px;">Auto-created from Timetable Uploads</strong>
-                        <p style="color: rgba(220,230,255,0.75); font-size: 13px; margin: 0; line-height: 1.5; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-                            Modules are automatically created when you upload timetable TXT files. Upload your timetable file to populate this list.
-                        </p>
-                    </div>
-                    <a href="../timetable_pdf_parser.php" class="btn" style="margin-left: auto; padding: 10px 20px; font-size: 14px; font-weight: 600; text-decoration: none; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Upload Timetable</a>
-                </div>
-            </div>
+<?php if (isset($_SESSION['success_message'])): ?>
+    <div class="alert alert-success">
+        <?= htmlspecialchars($_SESSION['success_message']) ?>
+    </div>
+    <?php unset($_SESSION['success_message']); ?>
+<?php endif; ?>
 
-            <div class="table-container card">
-                <table class="table compact">
-                    <thead>
-                        <tr>
-                            <th data-sort>ID</th>
-                            <th data-sort>Code</th>
-                            <th data-sort>Name</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($modules)): ?>
-                            <tr>
-                                <td colspan="4" style="text-align: center; padding: 60px 40px; color: rgba(220,230,255,0.65); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-                                    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 48px; height: 48px; color: rgba(220,230,255,0.4); margin-bottom: 8px;">
-                                            <path d="M4 22h16a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v16Z"/><path d="M14 2v6h6"/>
+<?php if (isset($_SESSION['error_message'])): ?>
+    <div class="alert alert-error">
+        <?= htmlspecialchars($_SESSION['error_message']) ?>
+    </div>
+    <?php unset($_SESSION['error_message']); ?>
+<?php endif; ?>
+
+<!-- Info banner: Modules are auto-created from timetable uploads -->
+<div class="content-card"
+    style="margin-bottom: 24px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 16px; padding: 20px 24px; backdrop-filter: blur(10px);">
+    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+        <div
+            style="width: 40px; height: 40px; background: rgba(59, 130, 246, 0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(59, 130, 246, 0.3);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                style="width:20px;height:20px; color: #93c5fd; flex-shrink: 0;">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4" />
+                <path d="M12 8h.01" />
+            </svg>
+        </div>
+        <div style="flex: 1; min-width: 200px;">
+            <strong
+                style="color: #e8edff; font-size: 15px; font-weight: 700; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: block; margin-bottom: 4px;">Auto-created
+                from Timetable Uploads</strong>
+            <p
+                style="color: rgba(220,230,255,0.75); font-size: 13px; margin: 0; line-height: 1.5; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                Modules are automatically created when you upload timetable TXT files. You can also add or edit them
+                manually below.
+            </p>
+        </div>
+        <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap;">
+            <button onclick="toggleAddForm()" class="btn"
+                style="padding: 10px 20px; font-size: 14px; font-weight: 600; font-family: 'Inter', sans-serif;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                    style="width:16px;height:16px;">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Add Module
+            </button>
+            <a href="../timetable_pdf_parser.php" class="btn"
+                style="padding: 10px 20px; font-size: 14px; font-weight: 600; text-decoration: none; font-family: 'Inter', sans-serif;">Upload
+                Timetable</a>
+        </div>
+    </div>
+</div>
+
+<!-- Add / Edit Form (collapsible) -->
+<div id="moduleFormCard" class="form" style="margin-bottom: 24px; display: <?= $editModule ? 'block' : 'none' ?>;">
+    <h3 style="margin: 0 0 20px 0; color: #e8edff; font-size: 17px; font-weight: 600; font-family: 'Inter', sans-serif;"
+        id="moduleFormTitle"><?= $editModule ? 'Edit Module' : 'Add Module' ?></h3>
+    <form method="POST">
+        <?php if ($editModule): ?>
+            <input type="hidden" name="module_id" value="<?= (int) $editModule['module_id'] ?>">
+        <?php endif; ?>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Module Code</label>
+                <input type="text" name="module_code" placeholder="e.g. CS101" required
+                    value="<?= htmlspecialchars($editModule['module_code'] ?? '') ?>">
+            </div>
+            <div class="form-group">
+                <label>Module Name</label>
+                <input type="text" name="module_name" placeholder="e.g. Introduction to Programming" required
+                    value="<?= htmlspecialchars($editModule['module_name'] ?? '') ?>">
+            </div>
+            <div class="form-group">
+                <label>Credits (optional)</label>
+                <input type="number" name="credits" min="0" max="60" placeholder="0"
+                    value="<?= (int) ($editModule['credits'] ?? 0) ?>">
+            </div>
+        </div>
+        <div style="display:flex;gap:10px;">
+            <button type="submit" class="btn btn-success"><?= $editModule ? 'Update Module' : 'Save Module' ?></button>
+            <a href="modules.php" class="btn btn-cancel">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<div class="table-container card">
+    <table class="table compact">
+        <thead>
+            <tr>
+                <th data-sort>ID</th>
+                <th data-sort>Code</th>
+                <th data-sort>Name</th>
+                <th>Credits</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (empty($modules)): ?>
+                <tr>
+                    <td colspan="5"
+                        style="text-align: center; padding: 60px 40px; color: rgba(220,230,255,0.65); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                                style="width: 48px; height: 48px; color: rgba(220,230,255,0.4); margin-bottom: 8px;">
+                                <path d="M4 22h16a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v16Z" />
+                                <path d="M14 2v6h6" />
+                            </svg>
+                            <div style="font-size: 15px; font-weight: 600; color: rgba(220,230,255,0.8);">No modules found
+                            </div>
+                            <div style="font-size: 13px; color: rgba(220,230,255,0.65); max-width: 400px;">Upload a
+                                timetable TXT file to automatically create modules, or add one manually above.</div>
+                            <button onclick="toggleAddForm()" class="btn"
+                                style="margin-top: 8px; padding: 10px 20px; font-size: 14px; font-weight: 600; font-family: 'Inter', sans-serif;">Add
+                                Module Manually</button>
+                        </div>
+                    </td>
+                </tr>
+            <?php else: ?>
+                <?php foreach ($modules as $module): ?>
+                    <tr>
+                        <td data-value="<?= (int) $module['module_id'] ?>"
+                            style="color: rgba(220,230,255,0.6); font-size: 13px; font-family: 'Inter', sans-serif;">
+                            <?= $module['module_id'] ?></td>
+                        <td data-value="<?= htmlspecialchars($module['module_code']) ?>"
+                            style="font-family: 'Inter', sans-serif;"><strong
+                                style="color: #e8edff; font-weight: 600; font-size: 14px;"><?= htmlspecialchars($module['module_code']) ?></strong>
+                        </td>
+                        <td data-value="<?= htmlspecialchars($module['module_name']) ?>"
+                            style="color: rgba(220,230,255,0.9); font-size: 14px; font-family: 'Inter', sans-serif;">
+                            <?= htmlspecialchars($module['module_name']) ?></td>
+                        <td style="color: rgba(220,230,255,0.6); font-size: 13px; font-family: 'Inter', sans-serif;">
+                            <?= (int) ($module['credits'] ?? 0) ?></td>
+                        <td>
+                            <div class="actions">
+                                <a href="modules.php?edit=<?= (int) $module['module_id'] ?>" class="icon-btn"
+                                    title="Edit module">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </a>
+                                <form method="POST" style="display:inline;"
+                                    onsubmit="return confirm('Delete module <?= htmlspecialchars(addslashes($module['module_code'])) ?>? This cannot be undone.')">
+                                    <input type="hidden" name="delete_module_id" value="<?= (int) $module['module_id'] ?>">
+                                    <button type="submit" class="icon-btn"
+                                        style="background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.25);color:#fca5a5;"
+                                        title="Delete module">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                                            <path d="M3 6h18"></path>
+                                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
                                         </svg>
-                                        <div style="font-size: 15px; font-weight: 600; color: rgba(220,230,255,0.8);">No modules found</div>
-                                        <div style="font-size: 13px; color: rgba(220,230,255,0.65); max-width: 400px;">Upload a timetable TXT file to automatically create modules.</div>
-                                        <a href="../timetable_pdf_parser.php" class="btn" style="margin-top: 8px; display: inline-block; padding: 10px 20px; font-size: 14px; font-weight: 600; text-decoration: none; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">Upload Timetable File</a>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php else: ?>
-                            <?php foreach ($modules as $module): ?>
-                            <tr>
-                                <td data-value="<?= (int)$module['module_id'] ?>" style="color: rgba(220,230,255,0.6); font-size: 13px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"><?= $module['module_id'] ?></td>
-                                <td data-value="<?= htmlspecialchars($module['module_code']) ?>" style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"><strong style="color: #e8edff; font-weight: 600; font-size: 14px;"><?= htmlspecialchars($module['module_code']) ?></strong></td>
-                                <td data-value="<?= htmlspecialchars($module['module_name']) ?>" style="color: rgba(220,230,255,0.9); font-size: 14px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"><?= htmlspecialchars($module['module_name']) ?></td>
-                                <td><span class="pill pill--muted" title="Auto-created from timetable upload">Auto-created</span></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-            
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</div>
 
-            
+<script>
+    function toggleAddForm() {
+        const card = document.getElementById('moduleFormCard');
+        const title = document.getElementById('moduleFormTitle');
+        if (card.style.display === 'none' || card.style.display === '') {
+            card.style.display = 'block';
+            title.textContent = 'Add Module';
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+            card.style.display = 'none';
+        }
+    }
+</script>
+
+
+
 
 <?php include 'footer_modern.php'; ?>
-

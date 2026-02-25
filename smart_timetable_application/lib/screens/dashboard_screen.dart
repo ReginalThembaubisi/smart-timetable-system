@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/student.dart';
@@ -21,6 +22,11 @@ import 'settings_screen.dart';
 import 'exam_timetable_screen.dart';
 import 'study_timer_screen.dart';
 import 'study_plan_screen.dart';
+import 'timetable_screen.dart';
+import 'outline_upload_screen.dart';
+import '../models/outline_event.dart';
+import '../services/local_storage_service.dart';
+import 'deadlines_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Student student;
@@ -39,6 +45,8 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   Map<String, Map<String, List<Session>>> timetableData = {};
   List<Module> studentModules = [];
   List<StudySession> studySessions = [];
+  List<OutlineEvent> outlineEvents = [];
+  final _storageService = LocalStorageService();
   
   // AI Suggestion
   Map<String, dynamic>? aiSuggestion;
@@ -52,6 +60,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   String selectedView = 'Today'; // 'Today' or 'Week'
   bool isOfflineMode = false;
   bool hasLocalData = false;
+  int _selectedIndex = 0; // Bottom nav index
   
   // Search state
   String searchQuery = '';
@@ -112,10 +121,6 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     final weekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     final currentWeekday = weekdayNames[today.weekday - 1];
     
-    // Debug print to see what day is detected
-    print('Debug: Current day detected: $currentWeekday (weekday: ${today.weekday})');
-    print('Debug: Today is actually: ${today.toString()}');
-    
     setState(() {
       selectedDay = currentWeekday;
     });
@@ -139,6 +144,10 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       
       // Generate AI suggestion
       await _generateAISuggestion();
+      
+      await _loadStudySessions();
+      await _loadExamNotifications();
+      await _loadOutlineEvents();
       
       // Calculate weekly progress
       _calculateWeeklyProgress();
@@ -164,7 +173,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       final studentId = widget.student.studentId;
       debugPrint('Loading student modules for ID: $studentId');
       
-      if (studentId <= 0) {
+      if (studentId < 0) {
         debugPrint('ERROR: Invalid student ID: $studentId');
         setState(() {
           errorMessage = 'Invalid student ID. Please log out and log in again.';
@@ -212,7 +221,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       final studentId = widget.student.studentId;
       debugPrint('Loading timetable for student ID: $studentId');
       
-      if (studentId <= 0) {
+      if (studentId < 0) {
         debugPrint('ERROR: Invalid student ID: $studentId');
         setState(() {
           errorMessage = 'Invalid student ID. Please log out and log in again.';
@@ -247,9 +256,22 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
         await _loadLocalData();
       }
     } catch (e) {
-      debugPrint('Error loading timetable: $e');
-      // Load from local storage if API fails
+      debugPrint('Timetable fetch error: $e');
+      // Fallback to local data
       await _loadLocalData();
+    }
+  }
+
+  Future<void> _loadOutlineEvents() async {
+    try {
+      await _storageService.initialize();
+      final events = _storageService.getOutlineEvents();
+      setState(() {
+        outlineEvents = events;
+      });
+      debugPrint('Loaded ${outlineEvents.length} outline events');
+    } catch (e) {
+      debugPrint('Error loading outline events: $e');
     }
   }
 
@@ -282,24 +304,15 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   }
 
   void _processTimetableData(Map<String, dynamic> timetableMap) {
-    print('Debug: Processing timetable data. Raw map keys: ${timetableMap.keys}');
-    print('Debug: Raw timetable data: $timetableMap');
-    
     final Map<String, Map<String, List<Session>>> processedData = {};
     
     // The API returns a map where keys are days and values are lists of sessions
     timetableMap.forEach((day, sessionsList) {
       if (sessionsList is List) {
         for (final sessionData in sessionsList) {
-          print('Debug: Processing session: $sessionData');
           final session = Session.fromJson(sessionData);
-          
-          // Use the day from the map key
-          String normalizedDay = _normalizeDayName(day);
-          
+          final String normalizedDay = _normalizeDayName(day);
           final startTime = sessionData['start_time']?.toString() ?? '00:00';
-          
-          print('Debug: Extracted day: $normalizedDay, startTime: $startTime');
           
           if (!processedData.containsKey(normalizedDay)) {
             processedData[normalizedDay] = {};
@@ -307,14 +320,10 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
           if (!processedData[normalizedDay]!.containsKey(startTime)) {
             processedData[normalizedDay]![startTime] = [];
           }
-          
           processedData[normalizedDay]![startTime]!.add(session);
         }
       }
     });
-    
-    print('Debug: Processed data structure: $processedData');
-    print('Debug: Processed data keys: ${processedData.keys}');
     
     // Get current day
     final today = DateTime.now();
@@ -330,24 +339,20 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       days.sort((a, b) {
         final indexA = dayOrder.indexOf(a);
         final indexB = dayOrder.indexOf(b);
-        // If day not found in order, put it at the end
         if (indexA == -1) return 1;
         if (indexB == -1) return -1;
         return indexA.compareTo(indexB);
       });
       
       // Set to current day if it exists and has sessions, otherwise first available day
-      if (days.contains(currentWeekday) && processedData[currentWeekday] != null && processedData[currentWeekday]!.isNotEmpty) {
+      if (days.contains(currentWeekday) &&
+          processedData[currentWeekday] != null &&
+          processedData[currentWeekday]!.isNotEmpty) {
         selectedDay = currentWeekday;
-        print('Debug: Set selected day to current day: $currentWeekday');
       } else if (days.isNotEmpty) {
         selectedDay = days.first;
-        print('Debug: Set selected day to first available: $selectedDay (current day $currentWeekday not found or has no sessions)');
-        print('Debug: Available days: ${days.join(', ')}');
       }
     });
-    
-    print('Debug: State updated. New timetableData keys: ${timetableData.keys}');
   }
 
   // Normalize day names from various formats (same as original timetable)
@@ -445,12 +450,6 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       return timeA.compareTo(timeB);
     });
     
-    // Debug print to see what sessions are being shown
-    print('Debug: Getting sessions for $selectedDay: ${allSessions.length} sessions');
-    for (final session in allSessions) {
-      print('  ${session.startTime} - ${session.endTime}: ${session.moduleName}');
-    }
-    
     return allSessions;
   }
 
@@ -518,9 +517,163 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   }
 
 
+  // Helper: get the next upcoming class for today
+  Session? _getNextClass() {
+    final todaySessions = getTodaySessions();
+    if (todaySessions.isEmpty) return null;
+    final now = DateTime.now();
+    final nowMinutes = now.hour * 60 + now.minute;
+    for (final s in todaySessions) {
+      final parts = (s.startTime ?? '00:00').split(':');
+      if (parts.length < 2) continue;
+      final classMinutes =
+          (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
+      if (classMinutes > nowMinutes) return s;
+    }
+    return null;
+  }
+
+  Widget _buildNextClassBanner() {
+    // Only show on 'Today' view for the actual current day
+    final today = DateTime.now();
+    final weekday = [
+      'Monday', 'Tuesday', 'Wednesday',
+      'Thursday', 'Friday', 'Saturday', 'Sunday'
+    ][today.weekday - 1];
+    if (selectedView != 'Today' || selectedDay != weekday) return const SizedBox.shrink();
+
+    final next = _getNextClass();
+    final Color bannerColor;
+    final IconData bannerIcon;
+    final String bannerText;
+
+    if (next == null) {
+      bannerColor = Colors.green;
+      bannerIcon = Icons.celebration;
+      bannerText = 'No more classes today 🎉';
+    } else {
+      bannerColor = AppColors.primary;
+      bannerIcon = Icons.schedule;
+      bannerText =
+          'Next: ${next.moduleName} at ${next.startTime} • ${next.venueName}';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: bannerColor.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: bannerColor.withValues(alpha: 0.4), width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(bannerIcon, color: bannerColor, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              bannerText,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomNavBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          top: BorderSide(
+              color: Colors.white.withValues(alpha: 0.1), width: 1),
+        ),
+      ),
+      child: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          if (index == _selectedIndex) return;
+          if (index == 1) {
+            // Navigate to dedicated timetable screen
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TimetableScreen(student: widget.student),
+              ),
+            );
+            return;
+          }
+          if (index == 2) {
+            // Navigate to study sessions
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => StudySessionsScreen(
+                  student: widget.student,
+                  studySessions: studySessions,
+                  studentModules: studentModules,
+                ),
+              ),
+            );
+            return;
+          }
+          if (index == 3) {
+            // Navigate to settings
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SettingsScreen(student: widget.student),
+              ),
+            );
+            return;
+          }
+          setState(() => _selectedIndex = index);
+        },
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.transparent,
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: Colors.white38,
+        selectedLabelStyle: const TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w600),
+        unselectedLabelStyle: const TextStyle(fontSize: 11),
+        elevation: 0,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month_outlined),
+            activeIcon: Icon(Icons.calendar_month),
+            label: 'Timetable',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.menu_book_outlined),
+            activeIcon: Icon(Icons.menu_book),
+            label: 'Study',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings_outlined),
+            activeIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: _buildBottomNavBar(),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -545,7 +698,8 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                             await _loadData();
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Data refreshed')),
+                                const SnackBar(
+                                    content: Text('Data refreshed')),
                               );
                             }
                           },
@@ -555,7 +709,9 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildGreetingCard(),
+                                _buildQuickActionsCard(),
+                                const SizedBox(height: 16),
+                                _buildUpcomingDeadlines(),
                                 const SizedBox(height: 16),
                                 _buildTodaysScheduleCard(),
                                 const SizedBox(height: 16),
@@ -563,10 +719,8 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                                 const SizedBox(height: 16),
                                 _buildWeeklyCalendarCard(),
                                 const SizedBox(height: 16),
-                                _buildQuickActionsCard(),
-                                const SizedBox(height: 16),
                                 _buildAISuggestionCard(),
-                                const SizedBox(height: 100), // Space for FAB
+                                const SizedBox(height: 24),
                               ],
                             ),
                           ),
@@ -580,6 +734,144 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       floatingActionButton: _buildFloatingActionButton(),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
+  }
+
+  Widget _buildUpcomingDeadlines() {
+    if (outlineEvents.isEmpty) return const SizedBox.shrink();
+    
+    // Sort events by date
+    final sortedEvents = List<OutlineEvent>.from(outlineEvents);
+    sortedEvents.sort((a, b) => a.date.compareTo(b.date));
+    
+    // Filter out past events
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final futureEvents = sortedEvents.where((e) => e.date.isAfter(today.subtract(const Duration(days: 1)))).toList();
+    
+    if (futureEvents.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Upcoming Deadlines',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DeadlinesScreen(modules: studentModules),
+                    ),
+                  ).then((_) => _loadOutlineEvents());
+                },
+                child: const Text('View All', style: TextStyle(color: AppColors.primary, fontSize: 13)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...futureEvents.take(3).map((event) => _buildDeadlineCard(event)).toList(),
+      ],
+    );
+  }
+
+  Widget _buildDeadlineCard(OutlineEvent event) {
+    final dateStr = DateFormat('MMM d').format(event.date);
+    final isVerySoon = event.date.difference(DateTime.now()).inDays < 3;
+    
+    return GlassCard(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _getEventColor(event.type).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _getEventColor(event.type).withValues(alpha: 0.3)),
+            ),
+            child: Icon(
+              _getEventIcon(event.type),
+              color: _getEventColor(event.type),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  event.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontSize: 14,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${event.moduleCode} • ${event.type}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                dateStr,
+                style: TextStyle(
+                  color: isVerySoon ? Colors.redAccent : Colors.white70,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              if (isVerySoon)
+                const Text(
+                  'Urgent',
+                  style: TextStyle(color: Colors.redAccent, fontSize: 9, fontWeight: FontWeight.bold),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getEventColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'test': return Colors.orangeAccent;
+      case 'assignment': return Colors.blueAccent;
+      case 'exam': return Colors.redAccent;
+      case 'practical': return Colors.tealAccent;
+      default: return Colors.white70;
+    }
+  }
+
+  IconData _getEventIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'test': return Icons.quiz;
+      case 'assignment': return Icons.assignment;
+      case 'exam': return Icons.workspace_premium;
+      case 'practical': return Icons.science;
+      default: return Icons.event;
+    }
   }
 
   Widget _buildLoadingState() {
@@ -790,6 +1082,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
               ),
             ),
           ),
+          _buildNextClassBanner(),
         ],
       ),
     );
@@ -828,162 +1121,102 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     );
   }
 
-  Widget _buildGreetingCard() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      child: GlassCard(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header with greeting and status
-            Row(
-              children: [
-                // Profile avatar with gradient
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: AppColors.primaryGradient,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(25),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.person,
+  Widget _buildQuickActionsCard() {
+    return GlassCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.flash_on,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Quick Actions',
+                  style: TextStyle(
                     color: Colors.white,
-                    size: 24,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${getGreeting()}, ${widget.student.fullName.split(' ').first}! 👋',
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        getCurrentDayName(),
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Sync status with modern styling
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isOfflineMode 
-                        ? [AppColors.warning.withValues(alpha: 0.2), AppColors.warning.withValues(alpha: 0.1)]
-                        : [AppColors.success.withValues(alpha: 0.2), AppColors.success.withValues(alpha: 0.1)],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isOfflineMode ? AppColors.warning : AppColors.success,
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isOfflineMode ? Icons.cloud_off : Icons.cloud_done,
-                        color: isOfflineMode ? AppColors.warning : AppColors.success,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        isOfflineMode ? 'Offline' : 'Synced',
-                        style: TextStyle(
-                          color: isOfflineMode ? AppColors.warning : AppColors.success,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            // Focus section with modern styling
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.primary.withValues(alpha: 0.1),
-                    AppColors.secondary.withValues(alpha: 0.1),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                  width: 1,
                 ),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      getTodayFocus(),
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () {
-                      final todaySessions = getTodaySessions();
-                      if (todaySessions.isNotEmpty) {
-                        _showModuleDetailsPopup(todaySessions.first);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.info_outline,
-                        color: AppColors.primary,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          // New Scan Outline feature
+          _buildQuickActionButton(
+            'Scan Outline',
+            Icons.document_scanner,
+            Colors.blue,
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => OutlineUploadScreen(modules: studentModules),
+                ),
+              ).then((_) => _loadOutlineEvents());
+            },
+          ),
+          
+          const SizedBox(height: 12),
+          
+          _buildQuickActionButton(
+            'Study Sessions',
+            Icons.book,
+            Colors.purple,
+            () => _navigateToStudySessions(),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          _buildQuickActionButton(
+            'Add Study Session',
+            Icons.add_circle,
+            Colors.green,
+            () => _navigateToCreateSession(),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          _buildQuickActionButtonWithBadge(
+            'Exam Timetables',
+            Icons.calendar_today,
+            Colors.red,
+            () => _navigateToExamTimetables(),
+            examNotificationCount,
+          ),
+          
+          const SizedBox(height: 12),
+          
+          _buildQuickActionButton(
+            'View Modules',
+            Icons.menu_book,
+            Colors.deepPurple,
+            () => _navigateToModules(),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          _buildQuickActionButton(
+            'Export Schedule',
+            Icons.share,
+            Colors.orange,
+            () => _exportSchedule(),
+          ),
+        ],
       ),
     );
   }
@@ -1737,90 +1970,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     );
   }
 
-  Widget _buildQuickActionsCard() {
-    return GlassCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.flash_on,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Quick Actions',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Mobile-friendly vertical layout
-          _buildQuickActionButton(
-            'Study Sessions',
-            Icons.book,
-            Colors.purple,
-            () => _navigateToStudySessions(),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          _buildQuickActionButton(
-            'Add Study Session',
-            Icons.add_circle,
-            Colors.blue,
-            () => _navigateToCreateSession(),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          _buildQuickActionButtonWithBadge(
-            'Exam Timetables',
-            Icons.calendar_today,
-            Colors.red,
-            () => _navigateToExamTimetables(),
-            examNotificationCount,
-          ),
-          
-          const SizedBox(height: 12),
-          
-          _buildQuickActionButton(
-            'View Modules',
-            Icons.menu_book,
-            Colors.deepPurple,
-            () => _navigateToModules(),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          _buildQuickActionButton(
-            'Export Schedule',
-            Icons.share,
-            Colors.orange,
-            () => _exportSchedule(),
-          ),
-        ],
-      ),
-    );
-  }
+// Method was moved to the top of the file for better organization during refactor.
 
   Widget _buildQuickActionButton(String title, IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(

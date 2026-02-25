@@ -221,6 +221,74 @@ class NotificationService {
     }
   }
   
+  // Schedule deadline reminder (7 days before)
+  static Future<int?> scheduleDeadlinesReminder(String title, DateTime deadlineDate, String type) async {
+    if (_flutterLocalNotificationsPlugin == null) return null;
+    
+    try {
+      final reminderId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final reminderDate = deadlineDate.subtract(const Duration(days: 7));
+      
+      // Only schedule if the reminder date is in the future
+      if (reminderDate.isAfter(DateTime.now())) {
+        const AndroidNotificationDetails androidPlatformChannelSpecifics =
+            AndroidNotificationDetails(
+          'deadlines_reminders',
+          'Deadline Reminders',
+          channelDescription: 'Reminders for upcoming academic deadlines',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        );
+        
+        const DarwinNotificationDetails iOSPlatformChannelSpecifics =
+            DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        );
+        
+        const NotificationDetails platformChannelSpecifics =
+            NotificationDetails(
+          android: androidPlatformChannelSpecifics,
+          iOS: iOSPlatformChannelSpecifics,
+        );
+        
+        if (kIsWeb) {
+          // Limited web support for scheduled notifications
+          print('Skipping scheduled notification on web for: $title');
+        } else {
+          await _flutterLocalNotificationsPlugin!.zonedSchedule(
+            reminderId,
+            '🔔 Upcoming $type',
+            'Your $title is due in 7 days!',
+            tz.TZDateTime.from(reminderDate, tz.local),
+            platformChannelSpecifics,
+            payload: 'deadline_$reminderId',
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          );
+        }
+        
+        print('Scheduled reminder for $title on $reminderDate');
+        return reminderId;
+      }
+    } catch (e) {
+      print('Error scheduling deadline reminder: $e');
+    }
+    return null;
+  }
+
+  // Cancel deadline reminder
+  static Future<void> cancelDeadlineReminder(int reminderId) async {
+    if (_flutterLocalNotificationsPlugin == null) return;
+    try {
+      await _flutterLocalNotificationsPlugin!.cancel(reminderId);
+      print('Canceled deadline reminder: $reminderId');
+    } catch (e) {
+      print('Error canceling deadline reminder: $e');
+    }
+  }
+
   // Schedule study session notification
   static Future<void> scheduleStudySessionNotification(String sessionId, String title, DateTime scheduledTime) async {
     if (_flutterLocalNotificationsPlugin == null) return;
