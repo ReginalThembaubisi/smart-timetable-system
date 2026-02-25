@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -18,21 +19,23 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-  <meta name="description" content="Intelligent study companion with AI-powered suggestions, Pomodoro timer, and personalized study planning for students.">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+  <meta name="description"
+    content="Intelligent study companion with AI-powered suggestions, Pomodoro timer, and personalized study planning for students.">
   <meta name="theme-color" content="#6366f1">
   <meta name="msapplication-TileColor" content="#6366f1">
 
   <!-- PWA Configuration -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="application-name" content="Smart Timetable">
-  
+
   <!-- iOS Specific Meta Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Smart Timetable">
   <meta name="format-detection" content="telephone=no">
-  
+
   <!-- iOS Icons -->
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
   <link rel="apple-touch-icon" sizes="152x152" href="icons/Icon-192.png">
@@ -40,12 +43,137 @@
   <link rel="apple-touch-icon" sizes="167x167" href="icons/Icon-192.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" href="favicon.png" />
 
   <title>Smart Timetable - AI Study Planner</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    body {
+      background-color: #6366f1;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+    }
+
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: white;
+    }
+
+    .logo-container {
+      width: 80px;
+      height: 80px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 24px;
+      animation: pulse 2s infinite ease-in-out;
+    }
+
+    .logo-container .icon {
+      font-size: 40px;
+    }
+
+    .loading-text {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .loading-subtext {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .loader-bar {
+      width: 200px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      margin-top: 24px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .loader-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 40%;
+      height: 100%;
+      background: #ffffff;
+      border-radius: 10px;
+      animation: loading 1.5s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.05);
+      }
+
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    @keyframes loading {
+      0% {
+        left: -40%;
+      }
+
+      100% {
+        left: 100%;
+      }
+    }
+  </style>
 </head>
+
 <body>
+  <div id="loading-indicator" class="loading-container">
+    <div class="logo-container">
+      <span class="icon">🎓</span>
+    </div>
+    <div class="loading-text">Smart Timetable</div>
+    <div class="loading-subtext">Initializing AI Planner...</div>
+    <div class="loader-bar"></div>
+  </div>
+
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    window.addEventListener('load', function () {
+      // Small delay to ensure smooth transition
+      setTimeout(function () {
+        const loading = document.getElementById('loading-indicator');
+        if (loading) {
+          // Check if app is actually rendered
+          const observer = new MutationObserver(function (mutations) {
+            if (document.querySelector('flt-glass-pane') || document.querySelector('flutter-view')) {
+              loading.style.opacity = '0';
+              setTimeout(() => loading.remove(), 300);
+              observer.disconnect();
+            }
+          });
+          observer.observe(document.body, { childList: true });
+        }
+      }, 500);
+    });
+  </script>
 </body>
+
 </html>
