@@ -98,23 +98,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  /// Skip backend — go straight to the dashboard with a mock student.
-  void _loginAsDemo() {
-    final demoStudent = Student(
-      studentId: 0,
-      studentNumber: 'DEMO001',
-      fullName: 'Demo Student',
-      email: 'demo@student.ac.za',
-      programme: 'Computer Science',
-      year: '2',
-    );
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => DashboardScreen(student: demoStudent),
-      ),
-    );
-  }
-
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
@@ -440,33 +423,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             
-                            SizedBox(height: isMobile ? 12 : 14),
-
-                            // ── Demo / bypass button ──────────────────────
-                            SizedBox(
-                              width: double.infinity,
-                              height: isMobile ? 44 : 48,
-                              child: OutlinedButton.icon(
-                                onPressed: _loginAsDemo,
-                                icon: const Icon(Icons.science_outlined,
-                                    color: Colors.white70, size: 18),
-                                label: Text(
-                                  'Continue as Demo',
-                                  style: TextStyle(
-                                    fontSize: isMobile ? 14 : 16,
-                                    color: Colors.white70,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(
-                                      color: Colors.white.withValues(alpha: 0.35),
-                                      width: 1.5),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12)),
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
