@@ -902,20 +902,23 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   }
 
   Widget _buildHeader() {
+    final firstName = widget.student.fullName.split(' ').first;
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row with profile and settings
+          // Row 1: avatar + greeting text + action buttons
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Profile avatar
+              // Profile avatar (slightly smaller)
               Container(
-                width: 50,
-                height: 50,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(25),
+                  borderRadius: BorderRadius.circular(21),
                   border: Border.all(
                     color: Colors.white.withValues(alpha: 0.3),
                     width: 2,
@@ -924,130 +927,105 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                 child: const Icon(
                   Icons.person,
                   color: Colors.white,
-                  size: 24,
+                  size: 22,
                 ),
               ),
-              
-              const SizedBox(width: 12),
-              
-              // User info
+
+              const SizedBox(width: 10),
+
+              // Greeting — takes all remaining space before the buttons
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${getGreeting()}, ${widget.student.fullName.split(' ').first} 👋',
+                      '${getGreeting()}, $firstName 👋',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        final todaySessions = getTodaySessions();
-                        if (todaySessions.isNotEmpty) {
-                          _showModuleDetailsPopup(todaySessions.first);
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                getTodayFocus(),
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.info_outline,
-                              color: Colors.white70,
-                              size: 16,
-                            ),
-                          ],
-                        ),
+                    Text(
+                      'Smart Timetable',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.55),
+                        fontSize: 12,
                       ),
                     ),
                   ],
                 ),
               ),
-              
-              // View toggle buttons
+
+              // Action buttons (Today / Week / modules / settings)
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildViewToggleButton('Today', selectedView == 'Today'),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   _buildViewToggleButton('Week', selectedView == 'Week'),
-                  const SizedBox(width: 12),
-                  // Compact modules count chip
+                  const SizedBox(width: 8),
                   if (studentModules.isNotEmpty) ...[
                     GestureDetector(
                       onTap: _navigateToModules,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                         decoration: BoxDecoration(
                           color: Colors.deepPurple.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.35), width: 1),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                              color: Colors.deepPurple.withValues(alpha: 0.35),
+                              width: 1),
                         ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.menu_book, color: Colors.white, size: 16),
-                            const SizedBox(width: 6),
+                            const Icon(Icons.menu_book,
+                                color: Colors.white, size: 15),
+                            const SizedBox(width: 4),
                             Text(
                               '${studentModules.length}',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12),
                             ),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                   ],
-                  // Settings button
                   GlassButton(
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => SettingsScreen(student: widget.student),
+                          builder: (context) =>
+                              SettingsScreen(student: widget.student),
                         ),
                       );
                     },
-                    padding: const EdgeInsets.all(8),
-                    borderRadius: 20,
+                    padding: const EdgeInsets.all(7),
+                    borderRadius: 18,
                     child: const Icon(
                       Icons.settings,
                       color: Colors.white,
-                      size: 20,
+                      size: 19,
                     ),
                   ),
-                  const SizedBox(width: 8),
                 ],
               ),
             ],
           ),
-          
-          const SizedBox(height: 16),
-          
-          // Search bar
+
+          const SizedBox(height: 12),
+
+          // Row 2: Search bar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(25),
@@ -1058,30 +1036,34 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             ),
             child: TextField(
               onChanged: _performSearch,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Search classes, lecturers, venues...',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+                hintStyle: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.6), fontSize: 14),
                 prefixIcon: Icon(
                   Icons.search,
-                  color: Colors.white.withValues(alpha: 0.7),
+                  color: Colors.white.withValues(alpha: 0.6),
+                  size: 20,
                 ),
                 suffixIcon: isSearching
                     ? IconButton(
                         icon: Icon(
                           Icons.clear,
-                          color: Colors.white.withValues(alpha: 0.7),
+                          color: Colors.white.withValues(alpha: 0.6),
+                          size: 18,
                         ),
-                        onPressed: () {
-                          _performSearch('');
-                        },
+                        onPressed: () => _performSearch(''),
                       )
                     : null,
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 6),
+                isDense: true,
               ),
             ),
           ),
+
           _buildNextClassBanner(),
         ],
       ),
