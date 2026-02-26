@@ -709,11 +709,11 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                _buildTodaysScheduleCard(),
+                                const SizedBox(height: 16),
                                 _buildQuickActionsCard(),
                                 const SizedBox(height: 16),
                                 _buildUpcomingDeadlines(),
-                                const SizedBox(height: 16),
-                                _buildTodaysScheduleCard(),
                                 const SizedBox(height: 16),
                                 _buildWeeklyProgressCard(),
                                 const SizedBox(height: 16),
