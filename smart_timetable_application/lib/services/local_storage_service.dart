@@ -8,6 +8,8 @@ class LocalStorageService {
   static const String _studentKey = 'student_data';
   static const String _outlineEventsKey = 'outline_events';
   static const String _apiKeyKey = 'gemini_api_key';
+  static const String _studyPreferenceKey = 'study_preference';
+  static const String _studyDaysKey = 'study_days';
   SharedPreferences? _prefs;
 
   LocalStorageService();
@@ -98,5 +100,28 @@ class LocalStorageService {
 
   String? getApiKey() {
     return _prefs?.getString(_apiKeyKey);
+  }
+
+  // Study time preference ('morning', 'afternoon', 'evening', 'night', 'balanced')
+  Future<void> saveStudyPreference(String preference) async {
+    if (_prefs != null) {
+      await _prefs!.setString(_studyPreferenceKey, preference);
+    }
+  }
+
+  String getStudyPreference() {
+    return _prefs?.getString(_studyPreferenceKey) ?? 'balanced';
+  }
+
+  // Preferred study days (e.g. ['Monday','Tuesday','Wednesday','Thursday','Friday'])
+  Future<void> saveStudyDays(List<String> days) async {
+    if (_prefs != null) {
+      await _prefs!.setStringList(_studyDaysKey, days);
+    }
+  }
+
+  List<String> getStudyDays() {
+    return _prefs?.getStringList(_studyDaysKey) ??
+        ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   }
 }

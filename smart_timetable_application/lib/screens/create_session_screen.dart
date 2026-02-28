@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/student.dart';
 import '../models/module.dart';
 import '../models/study_session.dart';
+import '../screens/session.dart';
 import '../services/study_session_service.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/glass_button.dart';
@@ -10,11 +12,15 @@ import '../config/app_colors.dart';
 class CreateSessionScreen extends StatefulWidget {
   final Student student;
   final List<Module> studentModules;
+  /// Optional: student's class timetable keyed by day → time → sessions.
+  /// When provided, smart defaults will skip any slots that conflict with a class.
+  final Map<String, Map<String, List<Session>>>? timetableData;
 
   const CreateSessionScreen({
     Key? key,
     required this.student,
     required this.studentModules,
+    this.timetableData,
   }) : super(key: key);
 
   @override
@@ -29,6 +35,8 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   String selectedStartTime = '09:00';
   String selectedEndTime = '10:00';
   String selectedSessionType = 'study';
+  String _studyPreference = 'balanced'; // loaded from prefs
+  bool _conflictAdjusted = false; // true when defaults were shifted to avoid a class
   // Venue removed - not needed per user request
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
@@ -50,8 +58,16 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
     for (final module in widget.studentModules) {
       debugPrint('Module: ${module.moduleCode} - ${module.moduleName}');
     }
-    
-    // Smart defaults
+    // Load preference first, then set smart defaults
+    _loadAndApplyPreference();
+  }
+
+  Future<void> _loadAndApplyPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pref = prefs.getString('study_preference') ?? 'balanced';
+    setState(() {
+      _studyPreference = pref;
+    });
     _setSmartDefaults();
   }
   
@@ -62,43 +78,106 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
       _titleController.text = 'Study ${selectedModule!.moduleName}';
     } else {
       debugPrint('CreateSessionScreen: No modules available!');
-      selectedModule = null; // Ensure it's null if no modules
+      selectedModule = null;
     }
-    
+
     // Set default day to today or next weekday
     final now = DateTime.now();
-    // Include full week mapping; fallback safely for weekend indexes
     final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    // If it's weekend, default to Monday, else use today's name
     selectedDay = (now.weekday >= 6) ? 'Monday' : weekdays[now.weekday - 1];
-    
-    // Set smart default times based on current time
-    final currentHour = now.hour;
-    if (currentHour < 8) {
-      // Early morning - suggest 9:00-10:00
-      selectedStartTime = '09:00';
-      selectedEndTime = '10:00';
-    } else if (currentHour < 12) {
-      // Morning - suggest next hour
-      final nextHour = (currentHour + 1).toString().padLeft(2, '0');
-      selectedStartTime = '$nextHour:00';
-      selectedEndTime = '${(currentHour + 2).toString().padLeft(2, '0')}:00';
-    } else if (currentHour < 17) {
-      // Afternoon - suggest 14:00-15:30
-      selectedStartTime = '14:00';
-      selectedEndTime = '15:30';
-    } else {
-      // Evening - suggest 19:00-20:30
-      selectedStartTime = '19:00';
-      selectedEndTime = '20:30';
+
+    // Determine preferred start time from saved study preference
+    String preferredStart;
+    switch (_studyPreference) {
+      case 'morning':
+        preferredStart = '07:00';
+        break;
+      case 'afternoon':
+        preferredStart = '13:00';
+        break;
+      case 'evening':
+        preferredStart = '17:30';
+        break;
+      case 'night':
+        preferredStart = '20:00';
+        break;
+      default: // 'balanced' — clock-based
+        final h = now.hour;
+        if (h < 8) {
+          preferredStart = '09:00';
+        } else if (h < 12) {
+          preferredStart = '${(h + 1).toString().padLeft(2, '0')}:00';
+        } else if (h < 17) {
+          preferredStart = '14:00';
+        } else {
+          preferredStart = '19:00';
+        }
     }
-    
-    // Set default session type to 'study' (already set)
+
+    // Find the next class-conflict-free slot starting from preferredStart
+    final freeStart = _findNextFreeSlot(selectedDay, preferredStart);
+    _conflictAdjusted = freeStart != preferredStart;
+
+    final startMinutes = _timeToMinutes(freeStart);
+    final endMinutes = startMinutes + 90; // 1.5 h session
+    final endHour = (endMinutes ~/ 60) % 24;
+    final endMin = endMinutes % 60;
+
+    selectedStartTime = freeStart;
+    selectedEndTime = '${endHour.toString().padLeft(2, '0')}:${endMin.toString().padLeft(2, '0')}';
+
     // Set default notes based on selected module
     if (selectedModule != null) {
       _notesController.text = 'Focus on ${selectedModule!.moduleName} concepts and practice';
     }
   }
+
+  /// Walk forward in 30-min steps from [startTime] on [day] until a 90-minute
+  /// window has no overlap with any class in [widget.timetableData].
+  String _findNextFreeSlot(String day, String startTime) {
+    if (widget.timetableData == null) return startTime;
+    final daySchedule = widget.timetableData![day] ?? {};
+    if (daySchedule.isEmpty) return startTime;
+
+    // Collect all class intervals for this day
+    final classTimes = <_TimeInterval>[];
+    for (final sessions in daySchedule.values) {
+      for (final session in sessions) {
+        final s = session.startTime;
+        final e = session.endTime;
+        if (s != null && e != null) {
+          classTimes.add(_TimeInterval(_timeToMinutes(s), _timeToMinutes(e)));
+        }
+      }
+    }
+
+    var candidate = _timeToMinutes(startTime);
+    const sessionDuration = 90; // minutes
+    const maxSearch = 24 * 60; // don't search past midnight
+
+    while (candidate + sessionDuration <= maxSearch) {
+      final candidateEnd = candidate + sessionDuration;
+      final conflict = classTimes.any((c) => candidate < c.end && candidateEnd > c.start);
+      if (!conflict) {
+        final h = (candidate ~/ 60) % 24;
+        final m = candidate % 60;
+        return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+      }
+      candidate += 30; // try next 30-min slot
+    }
+
+    return startTime; // fallback: return original if nothing found
+  }
+
+  static int _timeToMinutes(String time) {
+    try {
+      final parts = time.split(':');
+      return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+    } catch (_) {
+      return 0;
+    }
+  }
+
 
   @override
   void dispose() {
@@ -293,6 +372,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
             
             // Time and Day Selection
             _buildSectionTitle('Schedule'),
+            _buildPreferenceBadge(),
             GlassCard(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -492,6 +572,59 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
     );
   }
 
+  Widget _buildPreferenceBadge() {
+    const emojis = {
+      'morning': '🌅',
+      'afternoon': '☀️',
+      'evening': '🌆',
+      'night': '🌙',
+      'balanced': '⚡',
+    };
+    const labels = {
+      'morning': 'Early Bird',
+      'afternoon': 'Afternoon',
+      'evening': 'Evening',
+      'night': 'Night Owl',
+      'balanced': 'Flexible',
+    };
+    final emoji = emojis[_studyPreference] ?? '⚡';
+    final label = labels[_studyPreference] ?? 'Flexible';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _conflictAdjusted ? '📚' : emoji,
+                  style: const TextStyle(fontSize: 13),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  _conflictAdjusted
+                      ? 'Adjusted to avoid your class schedule'
+                      : 'Based on your $label preference',
+                  style: TextStyle(
+                    color: _conflictAdjusted ? Colors.orange[200] : Colors.white60,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _createSession() async {
     if (_formKey.currentState!.validate() && selectedModule != null) {
       try {
@@ -587,3 +720,9 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   }
 }
 
+/// Simple start/end minute range for class-conflict detection.
+class _TimeInterval {
+  final int start;
+  final int end;
+  const _TimeInterval(this.start, this.end);
+}

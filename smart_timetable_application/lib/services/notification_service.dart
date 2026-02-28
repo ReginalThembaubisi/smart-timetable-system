@@ -294,8 +294,12 @@ class NotificationService {
     if (_flutterLocalNotificationsPlugin == null) return;
     
     try {
-      // Schedule notification 15 minutes before the session
-      final notificationTime = scheduledTime.subtract(const Duration(minutes: 15));
+      // Read user's preferred reminder lead time (default 15 min)
+      final prefs = await SharedPreferences.getInstance();
+      final leadMinutes = prefs.getInt('reminder_lead_minutes') ?? 15;
+
+      // Schedule notification [leadMinutes] before the session
+      final notificationTime = scheduledTime.subtract(Duration(minutes: leadMinutes));
       
       // Only schedule if the time is in the future
       if (notificationTime.isAfter(DateTime.now())) {
@@ -323,6 +327,8 @@ class NotificationService {
           android: androidPlatformChannelSpecifics,
           iOS: iOSPlatformChannelSpecifics,
         );
+
+        final leadLabel = leadMinutes == 60 ? '1 hour' : '$leadMinutes minutes';
         
         // For web, we'll use a simpler approach since local notifications are limited
         if (kIsWeb) {
@@ -330,7 +336,7 @@ class NotificationService {
           await _flutterLocalNotificationsPlugin!.show(
             int.parse(sessionId),
             '📚 Study Session Reminder',
-            '$title starts in 15 minutes! Time to prepare.',
+            '$title starts in $leadLabel! Time to prepare.',
             platformChannelSpecifics,
             payload: 'study_session_$sessionId',
           );
@@ -339,7 +345,7 @@ class NotificationService {
           await _flutterLocalNotificationsPlugin!.zonedSchedule(
             int.parse(sessionId),
             '📚 Study Session Reminder',
-            '$title starts in 15 minutes! Time to prepare.',
+            '$title starts in $leadLabel! Time to prepare.',
             tz.TZDateTime.from(notificationTime, tz.local),
             platformChannelSpecifics,
             payload: 'study_session_$sessionId',
@@ -347,7 +353,7 @@ class NotificationService {
           );
         }
         
-        print('Scheduling notification for session: $sessionId at $scheduledTime');
+        print('Scheduling notification for session: $sessionId at $scheduledTime ($leadMinutes min early)');
       }
     } catch (e) {
       print('Error scheduling notification: $e');

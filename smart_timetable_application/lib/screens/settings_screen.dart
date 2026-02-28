@@ -3,6 +3,7 @@ import '../models/student.dart';
 import '../config/app_colors.dart';
 import '../services/local_storage_service.dart';
 import 'change_password_screen.dart';
+import 'study_preferences_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Student student;
@@ -17,6 +18,28 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  String _studyPrefLabel = 'Flexible';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferenceLabel();
+  }
+
+  Future<void> _loadPreferenceLabel() async {
+    final storage = LocalStorageService();
+    await storage.initialize();
+    final pref = storage.getStudyPreference();
+    final labels = {
+      'morning': 'Early Bird 🌅',
+      'afternoon': 'Afternoon ☀️',
+      'evening': 'Evening 🌆',
+      'night': 'Night Owl 🌙',
+      'balanced': 'Flexible ⚡',
+    };
+    if (mounted) setState(() => _studyPrefLabel = labels[pref] ?? 'Flexible ⚡');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -61,6 +84,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 );
+              },
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.schedule, color: Colors.purple),
+              title: const Text('Study Preferences'),
+              subtitle: Text('When you study best · $_studyPrefLabel'),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () async {
+                final changed = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const StudyPreferencesScreen(),
+                  ),
+                );
+                if (changed == true) _loadPreferenceLabel();
               },
             ),
           ),

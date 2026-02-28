@@ -26,6 +26,7 @@ import 'timetable_screen.dart';
 import 'outline_upload_screen.dart';
 import '../models/outline_event.dart';
 import '../services/local_storage_service.dart';
+import '../services/notification_service.dart';
 import 'deadlines_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -50,7 +51,8 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   
   // AI Suggestion
   Map<String, dynamic>? aiSuggestion;
-  
+  String _studyPreferenceLabel = '⚡ Flexible'; // updated with each AI refresh
+
   bool isLoading = true;
   String? errorMessage;
   
@@ -281,6 +283,9 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       setState(() {
         studySessions = sessions;
       });
+      // Schedule OS-level reminders for every study session
+      // (respects the user's saved reminder lead time; default 15 min)
+      await NotificationService.scheduleAllStudySessionNotifications(sessions);
     } catch (e) {
       debugPrint('Error loading study sessions: $e');
     }
@@ -2089,14 +2094,32 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'AI Study Suggestion',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'AI Study Suggestion',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                      ),
+                      child: Text(
+                        _studyPreferenceLabel,
+                        style: const TextStyle(color: Colors.white70, fontSize: 10),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -2563,6 +2586,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
         builder: (context) => CreateSessionScreen(
           student: widget.student,
           studentModules: studentModules,
+          timetableData: timetableData,
         ),
       ),
     ).then((_) {
@@ -2638,6 +2662,19 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       // Get user's study preference from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final studyPreference = prefs.getString('study_preference') ?? 'balanced';
+      // Update the displayed preference label
+      const prefLabels = {
+        'morning': '🌅 Early Bird',
+        'afternoon': '☀️ Afternoon',
+        'evening': '🌆 Evening',
+        'night': '🌙 Night Owl',
+        'balanced': '⚡ Flexible',
+      };
+      if (mounted) {
+        setState(() {
+          _studyPreferenceLabel = prefLabels[studyPreference] ?? '⚡ Flexible';
+        });
+      }
       // Study preference retrieved
       
       aiSuggestion = AISuggestionService.generateStudySuggestion(
@@ -3028,6 +3065,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                     builder: (context) => CreateSessionScreen(
                       student: widget.student,
                       studentModules: studentModules,
+                      timetableData: timetableData,
                     ),
                   ),
                 );
