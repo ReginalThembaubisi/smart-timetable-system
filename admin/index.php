@@ -225,7 +225,7 @@ $breadcrumbs = [
                 </div>
             </div>
         </div>
-        <div style="display:flex; flex-wrap:wrap; gap:12px;">
+        <div class="hero-stats-grid" style="display:flex; flex-wrap:wrap; gap:12px;">
             <?php
             $heroCards = [
                 ['label' => 'STUDENTS', 'value' => $stats['students'], 'desc' => 'Registered this semester', 'r' => '99,102,241', 'href' => 'students.php'],
@@ -642,7 +642,7 @@ $breadcrumbs = [
 
 <!-- Bottom utility cards -->
 <div style="padding: 0; background: transparent; border: none; box-shadow: none; margin-top: 40px;">
-    <div
+    <div class="utility-grid"
         style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 40px; align-items: start;">
         <!-- Upload Timetable File - Premium Neo-Glass Style -->
         <div style="

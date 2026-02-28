@@ -623,7 +623,7 @@ if ($assetVersion === false) {
 
         .search-bar input {
             flex: 1;
-            min-width: 300px;
+            min-width: 0;
             padding: 12px 16px;
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid var(--border-color);
@@ -847,6 +847,20 @@ if ($assetVersion === false) {
             transition: width .6s ease;
         }
 
+        /* Sidebar backdrop overlay */
+        .sidebar-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            z-index: 999;
+            backdrop-filter: blur(2px);
+        }
+
+        .sidebar-backdrop.open {
+            display: block;
+        }
+
         /* Responsive Design */
         @media (max-width: 768px) {
             .sidebar {
@@ -862,18 +876,19 @@ if ($assetVersion === false) {
             .main-content {
                 margin-left: 0;
                 padding: var(--spacing-lg);
+                padding-top: 64px;
             }
 
             .mobile-menu-btn {
                 display: block;
                 position: fixed;
-                top: var(--spacing-lg);
-                left: var(--spacing-lg);
+                top: 12px;
+                left: 12px;
                 z-index: 1001;
                 background: rgba(102, 126, 234, 0.2);
                 border: 1px solid var(--border-color);
                 color: white;
-                padding: 12px;
+                padding: 10px;
                 border-radius: var(--radius-sm);
                 cursor: pointer;
                 backdrop-filter: blur(10px);
@@ -889,16 +904,41 @@ if ($assetVersion === false) {
 
             .search-bar input {
                 width: 100%;
-                min-width: auto;
+                min-width: 0;
+            }
+
+            /* Tables: horizontal scroll instead of overflow */
+            .table-container {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
             }
 
             table {
                 font-size: 12px;
+                min-width: 520px;
             }
 
             table th,
             table td {
-                padding: 10px;
+                padding: 10px 8px;
+                white-space: nowrap;
+            }
+        }
+
+        /* Extra-small screens: hero cards + utility grid */
+        @media (max-width: 480px) {
+
+            /* Hero stat cards: 2-column wrap */
+            .hero-stats-grid {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+
+            /* Bottom utility grid: single column */
+            .utility-grid {
+                grid-template-columns: 1fr !important;
+                gap: 20px !important;
             }
         }
 
@@ -997,7 +1037,7 @@ if ($assetVersion === false) {
 </head>
 
 <body>
-    <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Open menu">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleSidebar()" aria-label="Open menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
             stroke-linejoin="round" style="width:22px;height:22px;display:block;">
             <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -1005,6 +1045,9 @@ if ($assetVersion === false) {
             <line x1="3" y1="18" x2="21" y2="18"></line>
         </svg>
     </button>
+
+    <!-- Sidebar backdrop (mobile) -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
 
     <div class="container">
         <!-- Premium Sidebar -->
