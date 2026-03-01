@@ -198,9 +198,17 @@ function parseTimetableFilePreview($content)
         } elseif ($currentSession) {
             if (preg_match('/Day:\s*(.+)/i', $line, $matches)) {
                 $currentSession['day'] = trim($matches[1]);
-            } elseif (preg_match('/Time:\s*(\d{2}:\d{2})-(\d{2}:\d{2})/i', $line, $matches)) {
-                $currentSession['start_time'] = $matches[1] . ':00';
-                $currentSession['end_time'] = $matches[2] . ':00';
+            } elseif (preg_match('/Time:\s*(\d{1,2}:\d{2})(?:\s*-\s*(\d{1,2}:\d{2}))?/i', $line, $matches)) {
+                $startTime = str_pad($matches[1], 5, '0', STR_PAD_LEFT);
+                $currentSession['start_time'] = $startTime . ':00';
+                if (!empty($matches[2])) {
+                    $endTime = str_pad($matches[2], 5, '0', STR_PAD_LEFT);
+                    $currentSession['end_time'] = $endTime . ':00';
+                } else {
+                    // Auto-calculate end time as start + 1 hour
+                    $startTs = strtotime(date('Y-m-d') . ' ' . $startTime);
+                    $currentSession['end_time'] = date('H:i', $startTs + 3600) . ':00';
+                }
             } elseif (preg_match('/Module:\s*(.+)/i', $line, $matches)) {
                 $moduleCode = trim($matches[1]);
                 if (!empty($moduleCode)) {
@@ -649,9 +657,17 @@ function parseTimetableFile($content, $pdo)
         } elseif ($currentSession) {
             if (preg_match('/Day:\s*(.+)/i', $line, $matches)) {
                 $currentSession['day'] = trim($matches[1]);
-            } elseif (preg_match('/Time:\s*(\d{2}:\d{2})-(\d{2}:\d{2})/i', $line, $matches)) {
-                $currentSession['start_time'] = $matches[1] . ':00';
-                $currentSession['end_time'] = $matches[2] . ':00';
+            } elseif (preg_match('/Time:\s*(\d{1,2}:\d{2})(?:\s*-\s*(\d{1,2}:\d{2}))?/i', $line, $matches)) {
+                $startTime = str_pad($matches[1], 5, '0', STR_PAD_LEFT);
+                $currentSession['start_time'] = $startTime . ':00';
+                if (!empty($matches[2])) {
+                    $endTime = str_pad($matches[2], 5, '0', STR_PAD_LEFT);
+                    $currentSession['end_time'] = $endTime . ':00';
+                } else {
+                    // Auto-calculate end time as start + 1 hour
+                    $startTs = strtotime(date('Y-m-d') . ' ' . $startTime);
+                    $currentSession['end_time'] = date('H:i', $startTs + 3600) . ':00';
+                }
             } elseif (preg_match('/Module:\s*(.+)/i', $line, $matches)) {
                 $moduleCode = trim($matches[1]);
                 if (!empty($moduleCode)) {
@@ -1336,7 +1352,8 @@ include 'admin/header_modern.php';
                 <div class="stat-card">
                     <div class="stat-label">Module Links</div>
                     <div class="stat-value" style="font-size: 28px; color: #9b59b6;">
-                        <?= $parsingResults['program_modules_linked'] ?></div>
+                        <?= $parsingResults['program_modules_linked'] ?>
+                    </div>
                 </div>
             <?php endif; ?>
         </div>
