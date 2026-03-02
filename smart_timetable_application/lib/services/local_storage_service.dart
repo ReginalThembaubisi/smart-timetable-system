@@ -42,8 +42,9 @@ class LocalStorageService {
     return getStudent() != null;
   }
 
-  Future<String?> getStudentId() async {
+  Future<int?> getStudentId() async {
     if (_prefs == null) await initialize();
+    // studentId is already an int? in the Student model
     return getStudent()?.studentId;
   }
 
