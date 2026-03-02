@@ -62,7 +62,8 @@ class StudyTimerService {
   void stopTimer() {
     _timer?.cancel();
     _currentState = TimerState.idle;
-    _remainingSeconds = 0;
+    // Reset to full duration so progress ring doesn't show 100% on stop
+    _remainingSeconds = _sessionType == TimerState.focus ? _focusDuration : _breakDuration;
     _updateStreams();
   }
 
@@ -79,21 +80,29 @@ class StudyTimerService {
       } else {
         _timer?.cancel();
         final wasBreak = _currentState == TimerState.breakTime;
+        final finishedType = _sessionType; // Capture what just finished
+        
+        // Let UI know we hit exactly 0 while still in the active state
+        _remainingSeconds = 0;
+        _updateStreams(); 
+        
+        // Then transition to idle
         _currentState = TimerState.idle;
         debugPrint('Timer completed - session finished!');
+        
+        // Let UI know we transitioned to idle and naturally completed
+        _updateStreams(isCompleted: true);
         
         // Show notification when break completes
         if (wasBreak) {
           NotificationService.showPomodoroBreakNotification();
         }
-        
-        _updateStreams();
       }
     });
     _updateStreams();
   }
   
-  void _updateStreams() {
+  void _updateStreams({bool isCompleted = false}) {
     _stateController.add(_currentState);
     _timeController.add(_remainingSeconds);
     _progressController.add({
@@ -101,6 +110,7 @@ class StudyTimerService {
       'sessionType': _sessionType,
       'remainingSeconds': _remainingSeconds,
       'totalSeconds': _sessionType == TimerState.focus ? _focusDuration : _breakDuration,
+      'isCompleted': isCompleted,
     });
   }
 

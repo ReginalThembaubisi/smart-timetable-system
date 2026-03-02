@@ -113,11 +113,10 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
           final remainingSeconds = data['remainingSeconds'] as int;
           final totalSeconds = data['totalSeconds'] as int;
           
-          // Check if a session just completed (transition from focus/break to idle)
-          if (_currentState != TimerState.idle && newState == TimerState.idle && remainingSeconds == 0) {
-            // Use the _previousState here to know what actually finished, 
-            // because if they pause right before it ends, the previous state might be pause.
-            // A safer check is to look at the timer service's intrinsic sessionType
+          // Check if a session just completed naturally
+          final isCompleted = data['isCompleted'] as bool? ?? false;
+          
+          if (isCompleted) {
             if (_timerService.sessionType == TimerState.focus) {
               _completedSessions++;
               _completedPomodoros++;
