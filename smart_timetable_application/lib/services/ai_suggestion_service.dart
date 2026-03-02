@@ -214,7 +214,7 @@ class AISuggestionService {
   ) {
     // Debug logging reduced for production
     final freeSlots = <Map<String, dynamic>>[];
-    final days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    final days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     
     // Handle gracefully when no timetable data exists
     final hasLimitedData = timetableData.isEmpty || 
@@ -631,7 +631,7 @@ class AISuggestionService {
     List<Map<String, dynamic>> moduleRecommendations,
   ) {
     final dailyPlan = <String, List<Map<String, dynamic>>>{};
-    final days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    final days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     
     // Group free slots by day
     final slotsByDay = <String, List<Map<String, dynamic>>>{};
@@ -673,7 +673,7 @@ class AISuggestionService {
         for (int i = 0; i < selectedSlots.length; i++) {
           final slot = selectedSlots[i];
           // FIX: Use a day-based offset so we don't always start with the same modules every day
-          final dayOffset = days.indexOf(day) * 2; 
+          final dayOffset = days.indexOf(day) * 3; 
           final module = moduleRecommendations[(dayOffset + i) % moduleRecommendations.length];
           
           String suggestion;
