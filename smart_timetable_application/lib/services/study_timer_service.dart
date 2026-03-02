@@ -8,6 +8,7 @@ class StudyTimerService {
   Timer? _timer;
   int _remainingSeconds = 0;
   TimerState _currentState = TimerState.idle;
+  TimerState _sessionType = TimerState.focus; // Tracks if the underlying session is focus or break
   int _focusDuration = 25 * 60; // 25 minutes
   int _breakDuration = 5 * 60; // 5 minutes
   
@@ -17,6 +18,7 @@ class StudyTimerService {
   final StreamController<Map<String, dynamic>> _progressController = StreamController<Map<String, dynamic>>.broadcast();
   
   TimerState get currentState => _currentState;
+  TimerState get sessionType => _sessionType;
   int get remainingSeconds => _remainingSeconds;
   String get remainingTime {
     final minutes = _remainingSeconds ~/ 60;
@@ -27,6 +29,7 @@ class StudyTimerService {
   void startFocusTimer() {
     _remainingSeconds = _focusDuration;
     _currentState = TimerState.focus;
+    _sessionType = TimerState.focus;
     debugPrint('Starting focus timer: $_remainingSeconds seconds ($_focusDuration total)');
     _startTimer();
   }
@@ -34,14 +37,15 @@ class StudyTimerService {
   void startBreakTimer() {
     _remainingSeconds = _breakDuration;
     _currentState = TimerState.breakTime;
+    _sessionType = TimerState.breakTime;
     debugPrint('Starting break timer: $_remainingSeconds seconds ($_breakDuration total)');
     _startTimer();
   }
 
   void pauseTimer() {
     if (_currentState == TimerState.focus || _currentState == TimerState.breakTime) {
-      final previousState = _currentState;
       _currentState = TimerState.paused;
+      // _sessionType remains unchanged so we know what we paused
       _timer?.cancel();
       _updateStreams();
     }
@@ -49,13 +53,9 @@ class StudyTimerService {
 
   void resumeTimer() {
     if (_currentState == TimerState.paused) {
-      // Resume to the appropriate state based on what was running before pause
-      // We'll determine this based on the remaining time and duration
-      if (_remainingSeconds > 0) {
-        // If we have significant time left, it's likely a focus session
-        _currentState = _remainingSeconds > _breakDuration ? TimerState.focus : TimerState.breakTime;
-        _startTimer();
-      }
+      // Resume to the underlying session type
+      _currentState = _sessionType;
+      _startTimer();
     }
   }
 
@@ -98,8 +98,9 @@ class StudyTimerService {
     _timeController.add(_remainingSeconds);
     _progressController.add({
       'currentState': _currentState,
+      'sessionType': _sessionType,
       'remainingSeconds': _remainingSeconds,
-      'totalSeconds': _currentState == TimerState.focus ? _focusDuration : _breakDuration,
+      'totalSeconds': _sessionType == TimerState.focus ? _focusDuration : _breakDuration,
     });
   }
 
@@ -130,5 +131,5 @@ class StudyTimerService {
     startBreakTimer();
   }
   
-  int get totalSeconds => _currentState == TimerState.focus ? _focusDuration : _breakDuration;
+  int get totalSeconds => _sessionType == TimerState.focus ? _focusDuration : _breakDuration;
 }

@@ -10,6 +10,7 @@ class LocalStorageService {
   static const String _apiKeyKey = 'gemini_api_key';
   static const String _studyPreferenceKey = 'study_preference';
   static const String _studyDaysKey = 'study_days';
+  static const String _pomodoroStatsKey = 'pomodoro_stats';
   SharedPreferences? _prefs;
 
   LocalStorageService();
@@ -129,5 +130,35 @@ class LocalStorageService {
   List<String> getStudyDays() {
     return _prefs?.getStringList(_studyDaysKey) ??
         ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  }
+
+  // Pomodoro Statistics
+  Future<void> savePomodoroStats(Map<String, int> stats) async {
+    if (_prefs != null) {
+      final jsonString = jsonEncode(stats);
+      await _prefs!.setString(_pomodoroStatsKey, jsonString);
+      debugPrint('Saved Pomodoro stats: $jsonString');
+    }
+  }
+
+  Map<String, int> getPomodoroStats() {
+    if (_prefs != null) {
+      final statsString = _prefs!.getString(_pomodoroStatsKey);
+      if (statsString != null) {
+        try {
+          final Map<String, dynamic> decoded = jsonDecode(statsString);
+          return decoded.map((key, value) => MapEntry(key, value as int));
+        } catch (e) {
+          debugPrint('Error parsing Pomodoro stats: $e');
+        }
+      }
+    }
+    // Default empty stats
+    return {
+      'sessions': 0,
+      'pomodoros': 0,
+      'focusTime': 0,
+      'breakTime': 0,
+    };
   }
 }

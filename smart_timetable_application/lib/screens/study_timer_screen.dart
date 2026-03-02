@@ -5,6 +5,7 @@ import '../services/study_timer_service.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/glass_button.dart';
 import '../services/notification_service.dart';
+import '../services/local_storage_service.dart';
 import '../config/app_colors.dart';
 
 class StudyTimerScreen extends StatefulWidget {
@@ -30,8 +31,12 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
   TimerState _currentState = TimerState.idle;
   int _remainingSeconds = 0;
   double _progress = 0.0;
+  
+  final LocalStorageService _storageService = LocalStorageService();
   int _completedSessions = 0;
   int _completedPomodoros = 0;
+  int _totalFocusTime = 0;
+  int _totalBreakTime = 0;
   
   // Timer duration options
   final List<int> focusDurations = [15, 25, 30, 45, 50];
@@ -45,6 +50,7 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
     super.initState();
     _timerService = StudyTimerService();
     _initializeTimer();
+    _loadStats();
     
     _progressController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -109,10 +115,17 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
           
           // Check if a session just completed (transition from focus/break to idle)
           if (_currentState != TimerState.idle && newState == TimerState.idle && remainingSeconds == 0) {
-            if (_currentState == TimerState.focus) {
+            // Use the _previousState here to know what actually finished, 
+            // because if they pause right before it ends, the previous state might be pause.
+            // A safer check is to look at the timer service's intrinsic sessionType
+            if (_timerService.sessionType == TimerState.focus) {
               _completedSessions++;
               _completedPomodoros++;
+              _totalFocusTime += (_timerService.totalSeconds ~/ 60);
+            } else if (_timerService.sessionType == TimerState.breakTime) {
+              _totalBreakTime += (_timerService.totalSeconds ~/ 60);
             }
+            _saveStats();
           }
           
           _currentState = newState;
@@ -122,6 +135,26 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
         
         _progressController.animateTo(_progress);
       }
+    });
+  }
+
+  Future<void> _loadStats() async {
+    await _storageService.initialize();
+    final stats = _storageService.getPomodoroStats();
+    setState(() {
+      _completedSessions = stats['sessions'] ?? 0;
+      _completedPomodoros = stats['pomodoros'] ?? 0;
+      _totalFocusTime = stats['focusTime'] ?? 0;
+      _totalBreakTime = stats['breakTime'] ?? 0;
+    });
+  }
+
+  Future<void> _saveStats() async {
+    await _storageService.savePomodoroStats({
+      'sessions': _completedSessions,
+      'pomodoros': _completedPomodoros,
+      'focusTime': _totalFocusTime,
+      'breakTime': _totalBreakTime,
     });
   }
 
@@ -339,7 +372,7 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
         
         // Session type
         Text(
-          _currentState == TimerState.focus ? 'Focus Time' : 'Break Time',
+          _timerService.sessionType == TimerState.focus ? 'Focus Time' : 'Break Time',
           style: const TextStyle(
             fontSize: 16,
             color: Colors.white70,
@@ -447,13 +480,13 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
               _buildInfoItem(
                 Icons.schedule,
                 'Focus Time',
-                '${_completedSessions * _selectedFocusDuration}min',
+                '${_totalFocusTime}min',
                 Colors.green,
               ),
               _buildInfoItem(
                 Icons.coffee,
                 'Break Time',
-                '${_completedSessions * _selectedBreakDuration}min',
+                '${_totalBreakTime}min',
                 Colors.purple,
               ),
             ],
@@ -716,52 +749,55 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> with TickerProvider
 
   // Helper methods
   List<Color> _getBackgroundColors() {
-    switch (_currentState) {
+    // Determine visuals based on actual underlying session type, not just paused state
+    final visualState = _currentState == TimerState.paused ? _timerService.sessionType : _currentState;
+    
+    switch (visualState) {
       case TimerState.focus:
         return [const Color(0xFF4A90E2), const Color(0xFF3B82F6)];
       case TimerState.breakTime:
         return [const Color(0xFF50E3C2), const Color(0xFF4CAF50)];
-      case TimerState.paused:
-        return [const Color(0xFFFF9800), const Color(0xFFFF5722)];
       default:
         return [const Color(0xFF4A90E2), const Color(0xFF3B82F6)];
     }
   }
 
   Color _getStateColor() {
-    switch (_currentState) {
+    if (_currentState == TimerState.paused) return Colors.orange;
+    
+    switch (_timerService.sessionType) {
       case TimerState.focus:
         return Colors.blue;
       case TimerState.breakTime:
         return Colors.green;
-      case TimerState.paused:
-        return Colors.orange;
       default:
         return Colors.white70;
     }
   }
 
   String _getStateText() {
-    switch (_currentState) {
+    if (_currentState == TimerState.paused) return 'PAUSED';
+    if (_currentState == TimerState.idle) return 'READY';
+    
+    switch (_timerService.sessionType) {
       case TimerState.focus:
         return 'FOCUS';
       case TimerState.breakTime:
         return 'BREAK';
-      case TimerState.paused:
-        return 'PAUSED';
       default:
         return 'READY';
     }
   }
 
   IconData _getStateIcon() {
-    switch (_currentState) {
+    if (_currentState == TimerState.paused) return Icons.pause_circle;
+    if (_currentState == TimerState.idle) return Icons.timer;
+    
+    switch (_timerService.sessionType) {
       case TimerState.focus:
         return Icons.school;
       case TimerState.breakTime:
         return Icons.coffee;
-      case TimerState.paused:
-        return Icons.pause_circle;
       default:
         return Icons.timer;
     }
