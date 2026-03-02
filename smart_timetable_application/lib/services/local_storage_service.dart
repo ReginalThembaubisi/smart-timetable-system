@@ -42,6 +42,11 @@ class LocalStorageService {
     return getStudent() != null;
   }
 
+  Future<String?> getStudentId() async {
+    if (_prefs == null) await initialize();
+    return getStudent()?.studentId;
+  }
+
   Future<void> clearStudent() async {
     if (_prefs != null) {
       await _prefs!.remove(_studentKey);

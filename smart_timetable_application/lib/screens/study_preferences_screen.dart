@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_colors.dart';
 import '../services/local_storage_service.dart';
+import '../services/study_session_service.dart';
 import '../widgets/glass_card.dart';
 
 /// Study preference identifiers
@@ -141,7 +142,7 @@ class _StudyPreferencesScreenState extends State<StudyPreferencesScreen>
     await prefs.setInt('reminder_lead_minutes', _selectedLeadMinutes);
     
     // Reschedule all notifications with the new lead time
-    final studentId = await LocalStorageService().getStudentId();
+    final studentId = await _storage.getStudentId();
     if (studentId != null) {
       await StudySessionService.rescheduleAllNotifications(studentId);
     }
