@@ -661,7 +661,8 @@ class AISuggestionService {
           }
           
           // Only add if no overlap and we haven't reached the limit
-          if (!hasOverlap && selectedSlots.length < 2) {
+          // Increased limit from 2 to 3 to allow more variety
+          if (!hasOverlap && selectedSlots.length < 3) {
             selectedSlots.add(slot);
           }
         }
@@ -671,7 +672,9 @@ class AISuggestionService {
         // Generate suggestions for non-overlapping slots
         for (int i = 0; i < selectedSlots.length; i++) {
           final slot = selectedSlots[i];
-          final module = moduleRecommendations[i % moduleRecommendations.length];
+          // FIX: Use a day-based offset so we don't always start with the same modules every day
+          final dayOffset = days.indexOf(day) * 2; 
+          final module = moduleRecommendations[(dayOffset + i) % moduleRecommendations.length];
           
           String suggestion;
           String focus;
