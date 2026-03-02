@@ -358,24 +358,31 @@ class StudySessionService {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     
-    // Get the target day of week
-    final dayIndex = _getDayIndex(dayOfWeek);
+    // Get the target day of week index (1=Mon, 7=Sun)
+    final targetDayIndex = _getDayIndex(dayOfWeek);
     final currentDayIndex = now.weekday;
     
-    // Calculate days to add to get to the target day
-    int daysToAdd = dayIndex - currentDayIndex;
-    if (daysToAdd <= 0) {
-      daysToAdd += 7; // Next week if day has passed
-    }
-    
-    final targetDate = today.add(Duration(days: daysToAdd));
-    
-    // Parse the time
+    // Parse the study session time
     final timeParts = timeString.split(':');
     final hour = int.parse(timeParts[0]);
     final minute = timeParts.length > 1 ? int.parse(timeParts[1]) : 0;
     
-    return DateTime(targetDate.year, targetDate.month, targetDate.day, hour, minute);
+    // Calculate days to add (0-6)
+    int daysToAdd = targetDayIndex - currentDayIndex;
+    if (daysToAdd < 0) {
+      daysToAdd += 7; // It's a day earlier in the week, move to next week
+    }
+    
+    DateTime targetDate = today.add(Duration(days: daysToAdd));
+    DateTime scheduledDateTime = DateTime(targetDate.year, targetDate.month, targetDate.day, hour, minute);
+    
+    // CRITICAL FIX: If the target day is TODAY and the time has already passed,
+    // we must move it to NEXT WEEK. Otherwise, if it's earlier today, keep it today.
+    if (daysToAdd == 0 && scheduledDateTime.isBefore(now)) {
+      scheduledDateTime = scheduledDateTime.add(const Duration(days: 7));
+    }
+    
+    return scheduledDateTime;
   }
   
   static int _getDayIndex(String dayName) {

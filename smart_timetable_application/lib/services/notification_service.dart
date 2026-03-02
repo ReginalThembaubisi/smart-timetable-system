@@ -311,7 +311,7 @@ class NotificationService {
           importance: Importance.high,
           priority: Priority.high,
           icon: '@mipmap/ic_launcher',
-          sound: RawResourceAndroidNotificationSound('notification'),
+          // removed non-existent sound resource
         );
         
         const DarwinNotificationDetails iOSPlatformChannelSpecifics =
@@ -407,25 +407,28 @@ class NotificationService {
   static DateTime? _getNextSessionDateTime(StudySession session) {
     try {
       final now = DateTime.now();
-      final dayOfWeek = _getDayOfWeekNumber(session.dayOfWeek);
+      final today = DateTime(now.year, now.month, now.day);
+      
+      final targetDayIndex = _getDayIndex(session.dayOfWeek);
+      final currentDayIndex = now.weekday;
+      
       final timeParts = session.startTime.split(':');
       final hour = int.parse(timeParts[0]);
       final minute = int.parse(timeParts[1]);
       
-      // Find the next occurrence of this day and time
-      DateTime sessionDateTime = DateTime(now.year, now.month, now.day, hour, minute);
-      
-      // Adjust to the correct day of the week
-      while (sessionDateTime.weekday != dayOfWeek) {
-        sessionDateTime = sessionDateTime.add(const Duration(days: 1));
+      int daysToAdd = targetDayIndex - currentDayIndex;
+      if (daysToAdd < 0) {
+        daysToAdd += 7;
       }
       
-      // If the time has passed today, schedule for next week
-      if (sessionDateTime.isBefore(now)) {
-        sessionDateTime = sessionDateTime.add(const Duration(days: 7));
+      DateTime targetDate = today.add(Duration(days: daysToAdd));
+      DateTime scheduledDateTime = DateTime(targetDate.year, targetDate.month, targetDate.day, hour, minute);
+      
+      if (daysToAdd == 0 && scheduledDateTime.isBefore(now)) {
+        scheduledDateTime = scheduledDateTime.add(const Duration(days: 7));
       }
       
-      return sessionDateTime;
+      return scheduledDateTime;
     } catch (e) {
       print('Error calculating next session time: $e');
       return null;

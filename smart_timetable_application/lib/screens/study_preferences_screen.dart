@@ -139,6 +139,13 @@ class _StudyPreferencesScreenState extends State<StudyPreferencesScreen>
     await _storage.saveStudyDays(_selectedDays);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('reminder_lead_minutes', _selectedLeadMinutes);
+    
+    // Reschedule all notifications with the new lead time
+    final studentId = await LocalStorageService().getStudentId();
+    if (studentId != null) {
+      await StudySessionService.rescheduleAllNotifications(studentId);
+    }
+    
     setState(() => _isSaving = false);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
