@@ -144,6 +144,9 @@ function parseTimetableFilePreview($content)
     $currentProgramme = '';
     $currentYear = '';
     $currentSemester = '';
+    $currentPeriod = '';
+    $currentTopVenue = ''; // top-level VENUE: header
+    $currentSessionType = 'class'; // updated by section markers
 
     $modulesFound = [];
     $lecturersFound = [];
@@ -157,29 +160,63 @@ function parseTimetableFilePreview($content)
         if (empty($line))
             continue;
 
+        // ── Section type markers  ── CLASS SESSIONS ── / ── PRACTICAL SESSIONS ──
+        if (preg_match('/--\s*(CLASS|LECTURE)\s*SESSIONS/i', $line)) {
+            $currentSessionType = 'class';
+            continue;
+        } elseif (preg_match('/--\s*PRACTICAL\s*SESSIONS/i', $line)) {
+            $currentSessionType = 'practical';
+            continue;
+        } elseif (preg_match('/--\s*TUTORIAL\s*SESSIONS/i', $line)) {
+            $currentSessionType = 'tutorial';
+            continue;
+        } elseif (preg_match('/--\s*\w.*SESSIONS/i', $line)) {
+            // Any other "-- XYZ SESSIONS --" marker → default to class
+            $currentSessionType = 'class';
+            continue;
+        }
+
         // Parse header info
         if (preg_match('/PROGRAMME:\s*(.+)/i', $line, $matches)) {
             $currentProgramme = trim($matches[1]);
         } elseif (preg_match('/YEAR\s*LEVEL:\s*(.+)/i', $line, $matches)) {
-            // Match various formats: "Year 1", "Level 1", "1", "First Year", etc.
             $yearText = trim($matches[1]);
-            // Extract number if present, otherwise use the full text
             if (preg_match('/(\d+)/', $yearText, $numMatches)) {
                 $currentYear = $numMatches[1];
             } else {
-                // If no number, use the text as-is (e.g., "First Year", "Level One")
                 $currentYear = $yearText;
             }
         } elseif (preg_match('/SEMESTER:\s*(.+)/i', $line, $matches)) {
             $currentSemester = trim($matches[1]);
+        } elseif (preg_match('/PERIOD:\s*(.+)/i', $line, $matches)) {
+            $currentPeriod = trim($matches[1]);
+        } elseif (preg_match('/^VENUE:\s*(.+)/i', $line, $matches)) {
+            // Top-level VENUE header (not inside a session)
+            if (!$currentSession) {
+                $venueRaw = trim($matches[1]);
+                // Extract name from "Code (Full Name)" format
+                if (preg_match('/^[^\(]+\((.+)\)/', $venueRaw, $vm)) {
+                    $currentTopVenue = trim($vm[1]);
+                } else {
+                    $currentTopVenue = $venueRaw;
+                }
+            }
+        }
+
+        // Skip module reference table lines (contain pipe characters)
+        if (strpos($line, '|') !== false && !preg_match('/SESSION\s*\d+/i', $line)) {
+            continue;
         }
 
         // Parse session
         if (preg_match('/SESSION\s*\d+:/i', $line)) {
             if ($currentSession && !empty($currentSession['module']) && !empty($currentSession['day'])) {
+                // Fall back to top-level venue if session has no room
+                if (empty($currentSession['room_name']) && !empty($currentTopVenue)) {
+                    $currentSession['room_name'] = $currentTopVenue;
+                }
                 $sessions[] = $currentSession;
 
-                // Track unique items
                 if (!empty($currentSession['module'])) {
                     $modulesFound[$currentSession['module']] = true;
                 }
@@ -191,9 +228,11 @@ function parseTimetableFilePreview($content)
                 }
             }
             $currentSession = [
-                'programme' => $currentProgramme,
-                'year' => $currentYear,
-                'semester' => $currentSemester,
+                'programme'    => $currentProgramme,
+                'year'         => $currentYear,
+                'semester'     => $currentSemester,
+                'period'       => $currentPeriod,
+                'session_type' => $currentSessionType,
             ];
         } elseif ($currentSession) {
             if (preg_match('/Day:\s*(.+)/i', $line, $matches)) {
@@ -205,21 +244,18 @@ function parseTimetableFilePreview($content)
                     $endTime = str_pad($matches[2], 5, '0', STR_PAD_LEFT);
                     $currentSession['end_time'] = $endTime . ':00';
                 } else {
-                    // Auto-calculate end time as start + 1 hour
                     $startTs = strtotime(date('Y-m-d') . ' ' . $startTime);
                     $currentSession['end_time'] = date('H:i', $startTs + 3600) . ':00';
                 }
             } elseif (preg_match('/Module:\s*(.+)/i', $line, $matches)) {
                 $moduleCode = trim($matches[1]);
                 if (!empty($moduleCode)) {
-                    // Keep multiple modules together as single module name
                     $currentSession['module'] = $moduleCode;
                 }
             } elseif (preg_match('/Staff:\s*(.+)/i', $line, $matches)) {
                 $currentSession['staff'] = trim($matches[1]);
             } elseif (preg_match('/Room:\s*(.+)/i', $line, $matches)) {
                 $roomInfo = trim($matches[1]);
-                // Extract room code and name
                 if (preg_match('/^([^\s\(]+)\s*\((.+)\)/', $roomInfo, $roomMatches)) {
                     $currentSession['room_code'] = $roomMatches[1];
                     $currentSession['room_name'] = $roomMatches[2];
@@ -232,6 +268,9 @@ function parseTimetableFilePreview($content)
 
     // Add last session
     if ($currentSession && !empty($currentSession['module']) && !empty($currentSession['day'])) {
+        if (empty($currentSession['room_name']) && !empty($currentTopVenue)) {
+            $currentSession['room_name'] = $currentTopVenue;
+        }
         $sessions[] = $currentSession;
         if (!empty($currentSession['module'])) {
             $modulesFound[$currentSession['module']] = true;
@@ -244,16 +283,24 @@ function parseTimetableFilePreview($content)
         }
     }
 
+    // Count sessions by type
+    $classSessions     = count(array_filter($sessions, fn($s) => ($s['session_type'] ?? 'class') === 'class'));
+    $practicalSessions = count(array_filter($sessions, fn($s) => ($s['session_type'] ?? '') === 'practical'));
+    $tutorialSessions  = count(array_filter($sessions, fn($s) => ($s['session_type'] ?? '') === 'tutorial'));
+
     return [
-        'sessions' => $sessions,
-        'total_sessions' => count($sessions),
-        'programmes' => count(array_unique(array_column($sessions, 'programme'))),
-        'modules_count' => count($modulesFound),
-        'lecturers_count' => count($lecturersFound),
-        'venues_count' => count($venuesFound),
-        'modules' => array_keys($modulesFound),
-        'lecturers' => array_keys($lecturersFound),
-        'venues' => array_keys($venuesFound),
+        'sessions'          => $sessions,
+        'total_sessions'    => count($sessions),
+        'class_sessions'    => $classSessions,
+        'practical_sessions'=> $practicalSessions,
+        'tutorial_sessions' => $tutorialSessions,
+        'programmes'        => count(array_unique(array_column($sessions, 'programme'))),
+        'modules_count'     => count($modulesFound),
+        'lecturers_count'   => count($lecturersFound),
+        'venues_count'      => count($venuesFound),
+        'modules'           => array_keys($modulesFound),
+        'lecturers'         => array_keys($lecturersFound),
+        'venues'            => array_keys($venuesFound),
     ];
 }
 
@@ -296,6 +343,19 @@ function saveParsedData($previewData, $pdo)
             $pdo->exec("ALTER TABLE sessions ADD INDEX idx_programme (programme)");
             $pdo->exec("ALTER TABLE sessions ADD INDEX idx_year_level (year_level)");
             $pdo->exec("ALTER TABLE sessions ADD INDEX idx_semester (semester)");
+        }
+
+        // Add session_type column if it doesn't exist yet
+        $stCol = $pdo->query("SHOW COLUMNS FROM sessions LIKE 'session_type'")->fetch();
+        if (!$stCol) {
+            $pdo->exec("ALTER TABLE sessions ADD COLUMN session_type ENUM('class','practical','tutorial','other') NOT NULL DEFAULT 'class' AFTER semester");
+            $pdo->exec("ALTER TABLE sessions ADD INDEX idx_session_type (session_type)");
+        }
+
+        // Add period column if it doesn't exist yet
+        $pdCol = $pdo->query("SHOW COLUMNS FROM sessions LIKE 'period'")->fetch();
+        if (!$pdCol) {
+            $pdo->exec("ALTER TABLE sessions ADD COLUMN period VARCHAR(100) NULL AFTER session_type");
         }
     } catch (Exception $e) {
         // Tables/columns might already exist, ignore error
@@ -557,26 +617,25 @@ function saveParsedData($previewData, $pdo)
 
         if (!$existing) {
             // Insert session into sessions table with proper foreign keys
-            // module_id → links to modules table
-            // lecturer_id → links to lecturers table (can be NULL)
-            // venue_id → links to venues table (can be NULL)
-            // programme, year_level, semester → from parsed data
-            $stmt = $pdo->prepare("INSERT INTO sessions (module_id, lecturer_id, venue_id, day_of_week, start_time, end_time, programme, year_level, semester) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            // Get programme, year, and semester from session data
-            $programme = !empty($session['programme']) ? trim($session['programme']) : null;
-            $yearLevel = !empty($session['year']) ? trim($session['year']) : null;
-            $semester = !empty($session['semester']) ? trim($session['semester']) : null;
+            $stmt = $pdo->prepare("INSERT INTO sessions (module_id, lecturer_id, venue_id, day_of_week, start_time, end_time, programme, year_level, semester, session_type, period) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $programme   = !empty($session['programme'])    ? trim($session['programme'])    : null;
+            $yearLevel   = !empty($session['year'])         ? trim($session['year'])         : null;
+            $semester    = !empty($session['semester'])     ? trim($session['semester'])     : null;
+            $sessionType = !empty($session['session_type']) ? trim($session['session_type']) : 'class';
+            $period      = !empty($session['period'])       ? trim($session['period'])       : null;
 
             $stmt->execute([
                 $moduleId,
-                $lecturerId,  // Can be NULL if no lecturer
-                $venueId,     // Can be NULL if no venue
+                $lecturerId,
+                $venueId,
                 $session['day'],
                 $session['start_time'],
                 $session['end_time'],
                 $programme,
                 $yearLevel,
-                $semester
+                $semester,
+                $sessionType,
+                $period
             ]);
             $createdCount++;
         } else {
@@ -590,16 +649,24 @@ function saveParsedData($previewData, $pdo)
         }
     }
 
+    // Count created/skipped by type
+    $classCreated     = count(array_filter($previewData['sessions'], fn($s) => ($s['session_type'] ?? 'class') === 'class'));
+    $practicalCreated = count(array_filter($previewData['sessions'], fn($s) => ($s['session_type'] ?? '') === 'practical'));
+    $tutorialCreated  = count(array_filter($previewData['sessions'], fn($s) => ($s['session_type'] ?? '') === 'tutorial'));
+
     return [
-        'total_sessions' => $previewData['total_sessions'],
-        'created' => $createdCount,
-        'skipped' => $skippedCount,
-        'programmes' => count($programsCreated),
-        'modules' => count($modulesCreated),
-        'lecturers' => count($lecturersCreated),
-        'venues' => count($venuesCreated),
+        'total_sessions'    => $previewData['total_sessions'],
+        'class_sessions'    => $classCreated,
+        'practical_sessions'=> $practicalCreated,
+        'tutorial_sessions' => $tutorialCreated,
+        'created'           => $createdCount,
+        'skipped'           => $skippedCount,
+        'programmes'        => count($programsCreated),
+        'modules'           => count($modulesCreated),
+        'lecturers'         => count($lecturersCreated),
+        'venues'            => count($venuesCreated),
         'program_modules_linked' => count($programModulesLinked),
-        'skipped_details' => $skippedDetails,
+        'skipped_details'   => $skippedDetails,
     ];
 }
 
@@ -610,6 +677,9 @@ function parseTimetableFile($content, $pdo)
     $currentProgramme = '';
     $currentYear = '';
     $currentSemester = '';
+    $currentPeriod = '';
+    $currentTopVenue = '';
+    $currentSessionType = 'class';
 
     $modulesCreated = [];
     $lecturersCreated = [];
@@ -627,32 +697,55 @@ function parseTimetableFile($content, $pdo)
         if (empty($line))
             continue;
 
+        // Section type markers
+        if (preg_match('/--\s*(CLASS|LECTURE)\s*SESSIONS/i', $line)) {
+            $currentSessionType = 'class'; continue;
+        } elseif (preg_match('/--\s*PRACTICAL\s*SESSIONS/i', $line)) {
+            $currentSessionType = 'practical'; continue;
+        } elseif (preg_match('/--\s*TUTORIAL\s*SESSIONS/i', $line)) {
+            $currentSessionType = 'tutorial'; continue;
+        } elseif (preg_match('/--\s*\w.*SESSIONS/i', $line)) {
+            $currentSessionType = 'class'; continue;
+        }
+
         // Parse header info
         if (preg_match('/PROGRAMME:\s*(.+)/i', $line, $matches)) {
             $currentProgramme = trim($matches[1]);
         } elseif (preg_match('/YEAR\s*LEVEL:\s*(.+)/i', $line, $matches)) {
-            // Match various formats: "Year 1", "Level 1", "1", "First Year", etc.
             $yearText = trim($matches[1]);
-            // Extract number if present, otherwise use the full text
             if (preg_match('/(\d+)/', $yearText, $numMatches)) {
                 $currentYear = $numMatches[1];
             } else {
-                // If no number, use the text as-is (e.g., "First Year", "Level One")
                 $currentYear = $yearText;
             }
         } elseif (preg_match('/SEMESTER:\s*(.+)/i', $line, $matches)) {
             $currentSemester = trim($matches[1]);
+        } elseif (preg_match('/PERIOD:\s*(.+)/i', $line, $matches)) {
+            $currentPeriod = trim($matches[1]);
+        } elseif (preg_match('/^VENUE:\s*(.+)/i', $line, $matches) && !$currentSession) {
+            $venueRaw = trim($matches[1]);
+            $currentTopVenue = preg_match('/^[^\(]+\((.+)\)/', $venueRaw, $vm) ? trim($vm[1]) : $venueRaw;
+        }
+
+        // Skip module reference table lines
+        if (strpos($line, '|') !== false && !preg_match('/SESSION\s*\d+/i', $line)) {
+            continue;
         }
 
         // Parse session
         if (preg_match('/SESSION\s*\d+:/i', $line)) {
             if ($currentSession) {
+                if (empty($currentSession['room_name']) && !empty($currentTopVenue)) {
+                    $currentSession['room_name'] = $currentTopVenue;
+                }
                 $sessions[] = $currentSession;
             }
             $currentSession = [
-                'programme' => $currentProgramme,
-                'year' => $currentYear,
-                'semester' => $currentSemester,
+                'programme'    => $currentProgramme,
+                'year'         => $currentYear,
+                'semester'     => $currentSemester,
+                'period'       => $currentPeriod,
+                'session_type' => $currentSessionType,
             ];
         } elseif ($currentSession) {
             if (preg_match('/Day:\s*(.+)/i', $line, $matches)) {
@@ -664,7 +757,6 @@ function parseTimetableFile($content, $pdo)
                     $endTime = str_pad($matches[2], 5, '0', STR_PAD_LEFT);
                     $currentSession['end_time'] = $endTime . ':00';
                 } else {
-                    // Auto-calculate end time as start + 1 hour
                     $startTs = strtotime(date('Y-m-d') . ' ' . $startTime);
                     $currentSession['end_time'] = date('H:i', $startTs + 3600) . ':00';
                 }
@@ -677,7 +769,6 @@ function parseTimetableFile($content, $pdo)
                 $currentSession['staff'] = trim($matches[1]);
             } elseif (preg_match('/Room:\s*(.+)/i', $line, $matches)) {
                 $roomInfo = trim($matches[1]);
-                // Extract room code and name
                 if (preg_match('/^([^\s\(]+)\s*\((.+)\)/', $roomInfo, $roomMatches)) {
                     $currentSession['room_code'] = $roomMatches[1];
                     $currentSession['room_name'] = $roomMatches[2];
@@ -690,6 +781,9 @@ function parseTimetableFile($content, $pdo)
 
     // Add last session
     if ($currentSession) {
+        if (empty($currentSession['room_name']) && !empty($currentTopVenue)) {
+            $currentSession['room_name'] = $currentTopVenue;
+        }
         $sessions[] = $currentSession;
     }
 
@@ -1262,6 +1356,22 @@ include 'admin/header_modern.php';
                 <div class="stat-label">Total Sessions</div>
                 <div class="stat-value"><?= $previewData['total_sessions'] ?></div>
             </div>
+            <?php if (!empty($previewData['practical_sessions']) || !empty($previewData['tutorial_sessions'])): ?>
+                <div class="stat-card">
+                    <div class="stat-label">Class Sessions</div>
+                    <div class="stat-value" style="font-size: 28px;"><?= $previewData['class_sessions'] ?></div>
+                </div>
+                <div class="stat-card" style="border-color: rgba(167, 139, 250, 0.4); background: rgba(167, 139, 250, 0.08);">
+                    <div class="stat-label" style="color: #c4b5fd;">Practicals</div>
+                    <div class="stat-value" style="font-size: 28px; color: #ddd6fe;"><?= $previewData['practical_sessions'] ?></div>
+                </div>
+                <?php if (!empty($previewData['tutorial_sessions'])): ?>
+                    <div class="stat-card" style="border-color: rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.08);">
+                        <div class="stat-label" style="color: #fcd34d;">Tutorials</div>
+                        <div class="stat-value" style="font-size: 28px; color: #fde68a;"><?= $previewData['tutorial_sessions'] ?></div>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
             <div class="stat-card">
                 <div class="stat-label">Programmes</div>
                 <div class="stat-value" style="font-size: 28px;"><?= $previewData['programmes'] ?></div>
@@ -1332,6 +1442,22 @@ include 'admin/header_modern.php';
                 <div class="stat-label">Skipped</div>
                 <div class="stat-value" style="color: #fca5a5;"><?= $parsingResults['skipped'] ?></div>
             </div>
+            <?php if (!empty($parsingResults['practical_sessions']) || !empty($parsingResults['tutorial_sessions'])): ?>
+                <div class="stat-card">
+                    <div class="stat-label">Class Sessions</div>
+                    <div class="stat-value" style="font-size: 28px;"><?= $parsingResults['class_sessions'] ?></div>
+                </div>
+                <div class="stat-card" style="border-color: rgba(167, 139, 250, 0.4); background: rgba(167, 139, 250, 0.08);">
+                    <div class="stat-label" style="color: #c4b5fd;">Practicals</div>
+                    <div class="stat-value" style="font-size: 28px; color: #ddd6fe;"><?= $parsingResults['practical_sessions'] ?></div>
+                </div>
+                <?php if (!empty($parsingResults['tutorial_sessions'])): ?>
+                    <div class="stat-card" style="border-color: rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.08);">
+                        <div class="stat-label" style="color: #fcd34d;">Tutorials</div>
+                        <div class="stat-value" style="font-size: 28px; color: #fde68a;"><?= $parsingResults['tutorial_sessions'] ?></div>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
             <div class="stat-card">
                 <div class="stat-label">Programmes</div>
                 <div class="stat-value" style="font-size: 28px;"><?= $parsingResults['programmes'] ?></div>
