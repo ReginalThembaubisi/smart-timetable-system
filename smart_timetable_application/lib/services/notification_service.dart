@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'dart:convert';
 import 'dart:async';
 import '../models/student.dart';
@@ -19,6 +20,12 @@ class NotificationService {
   static Future<void> initialize() async {
     // Initialize timezone data
     tz.initializeTimeZones();
+    try {
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (e) {
+      print('Could not set local timezone: $e');
+    }
     
     // Initialize the notification plugin
     _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -78,10 +85,19 @@ class NotificationService {
           );
       
       // Request permissions for Android 13+
-      await _flutterLocalNotificationsPlugin!
+      final androidPlugin = _flutterLocalNotificationsPlugin!
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
+              AndroidFlutterLocalNotificationsPlugin>();
+      
+      if (androidPlugin != null) {
+        await androidPlugin.requestNotificationsPermission();
+        // Request exact alarms permission for Android 14+ (this launches a settings page if not granted)
+        try {
+          await androidPlugin.requestExactAlarmsPermission();
+        } catch (e) {
+          print('Could not request exact alarms permission: $e');
+        }
+      }
     }
   }
   
@@ -258,15 +274,28 @@ class NotificationService {
           // Limited web support for scheduled notifications
           print('Skipping scheduled notification on web for: $title');
         } else {
-          await _flutterLocalNotificationsPlugin!.zonedSchedule(
-            reminderId,
-            '🔔 Upcoming $type',
-            'Your $title is due in 7 days!',
-            tz.TZDateTime.from(reminderDate, tz.local),
-            platformChannelSpecifics,
-            payload: 'deadline_$reminderId',
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          );
+          try {
+            await _flutterLocalNotificationsPlugin!.zonedSchedule(
+              reminderId,
+              '🔔 Upcoming $type',
+              'Your $title is due in 7 days!',
+              tz.TZDateTime.from(reminderDate, tz.local),
+              platformChannelSpecifics,
+              payload: 'deadline_$reminderId',
+              androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            );
+          } catch (e) {
+            print('Exact alarm failed for deadline, falling back to inexact: $e');
+            await _flutterLocalNotificationsPlugin!.zonedSchedule(
+              reminderId,
+              '🔔 Upcoming $type',
+              'Your $title is due in 7 days!',
+              tz.TZDateTime.from(reminderDate, tz.local),
+              platformChannelSpecifics,
+              payload: 'deadline_$reminderId',
+              androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            );
+          }
         }
         
         print('Scheduled reminder for $title on $reminderDate');
@@ -342,15 +371,28 @@ class NotificationService {
           );
         } else {
           // For mobile platforms, use scheduled notifications
-          await _flutterLocalNotificationsPlugin!.zonedSchedule(
-            int.parse(sessionId),
-            '📚 Study Session Reminder',
-            '$title starts in $leadLabel! Time to prepare.',
-            tz.TZDateTime.from(notificationTime, tz.local),
-            platformChannelSpecifics,
-            payload: 'study_session_$sessionId',
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          );
+          try {
+            await _flutterLocalNotificationsPlugin!.zonedSchedule(
+              int.parse(sessionId),
+              '📚 Study Session Reminder',
+              '$title starts in $leadLabel! Time to prepare.',
+              tz.TZDateTime.from(notificationTime, tz.local),
+              platformChannelSpecifics,
+              payload: 'study_session_$sessionId',
+              androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            );
+          } catch (e) {
+            print('Exact alarm failed for study session, falling back to inexact: $e');
+            await _flutterLocalNotificationsPlugin!.zonedSchedule(
+              int.parse(sessionId),
+              '📚 Study Session Reminder',
+              '$title starts in $leadLabel! Time to prepare.',
+              tz.TZDateTime.from(notificationTime, tz.local),
+              platformChannelSpecifics,
+              payload: 'study_session_$sessionId',
+              androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            );
+          }
         }
         
         print('Scheduling notification for session: $sessionId at $scheduledTime ($leadMinutes min early)');

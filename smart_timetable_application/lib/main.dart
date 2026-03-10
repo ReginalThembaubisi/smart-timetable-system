@@ -244,7 +244,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     
                     // Title
                     Text(
-                      'Student Timetable',
+                      'Smart Timetable',
                       style: TextStyle(
                         fontSize: titleFontSize,
                         fontWeight: FontWeight.bold,
