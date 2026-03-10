@@ -1,6 +1,4 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import '../services/outline_service.dart';
 import '../models/outline_event.dart';
 import '../models/module.dart';
@@ -24,7 +22,7 @@ class OutlineUploadScreen extends StatefulWidget {
 }
 
 class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
-  PlatformFile? _selectedFile;
+  final TextEditingController _textController = TextEditingController();
   Module? _selectedModule;
   bool _isExtracting = false;
   List<OutlineEvent> _extractedEvents = [];
@@ -42,27 +40,14 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
 
   @override
   void dispose() {
+    _textController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'docx'],
-      withData: true, // Required for web to get bytes
-    );
-
-    if (result != null) {
-      setState(() {
-        _selectedFile = result.files.single;
-      });
-    }
-  }
-
   Future<void> _startExtraction() async {
-    if (_selectedFile == null || _selectedModule == null) {
+    if (_textController.text.trim().isEmpty || _selectedModule == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a module and a file first.')),
+        const SnackBar(content: Text('Please select a module and paste the syllabus text first.')),
       );
       return;
     }
@@ -73,8 +58,8 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     });
 
     try {
-      final events = await OutlineService.extractEventsFromDocument(
-        _selectedFile!,
+      final events = await OutlineService.extractEventsFromText(
+        _textController.text,
         AIConfig.geminiApiKey,
         _selectedModule!.moduleCode,
       );
@@ -184,7 +169,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
           ),
           const SizedBox(width: 8),
           const Text(
-            'Scan Module Outline',
+            'Smart Paste Schedule',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -203,7 +188,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Extract dates from your syllabus',
+            'Paste your syllabus text here',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -228,49 +213,41 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
               labelText: 'Select Module',
               labelStyle: TextStyle(color: Colors.white70),
               prefixIcon: Icon(Icons.book, color: Colors.white70),
+              filled: true,
+              fillColor: Colors.black12,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+              ),
             ),
           ),
           const SizedBox(height: 20),
 
-          // File Picker
-          GestureDetector(
-            onTap: _pickFile,
-            child: Container(
-              height: 120,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  style: BorderStyle.solid,
-                ),
+          // Text Paste Area
+          TextField(
+            controller: _textController,
+            maxLines: 10,
+            minLines: 5,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: "Open your PDF/DOCX, select all text (Ctrl+A / Cmd+A), copy, and paste it all here...",
+              hintStyle: const TextStyle(color: Colors.white38),
+              filled: true,
+              fillColor: Colors.black12,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    _selectedFile == null ? Icons.upload_file : Icons.check_circle,
-                    size: 40,
-                    color: _selectedFile == null ? Colors.white54 : Colors.greenAccent,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _selectedFile == null 
-                        ? 'Select PDF or DOCX file' 
-                        : _selectedFile!.name,
-                    style: const TextStyle(color: Colors.white70),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.primary),
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Note: For older Word files (.doc), please "Save As PDF" before uploading.',
-            style: TextStyle(color: Colors.white54, fontSize: 12, fontStyle: FontStyle.italic),
-          ),
+          
           const SizedBox(height: 24),
 
           GlassButton(
@@ -282,7 +259,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                       width: 20, 
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text('Start AI Scan', style: TextStyle(fontWeight: FontWeight.bold)),
+                  : const Text('Extract Dates', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -299,12 +276,12 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
             const CircularProgressIndicator(color: AppColors.primary),
             const SizedBox(height: 16),
             const Text(
-              'AI is analyzing your document...',
+              'AI is analyzing your text...',
               style: TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 4),
             const Text(
-              'This usually takes about 10-15 seconds',
+              'This usually takes about 5-10 seconds',
               style: TextStyle(color: Colors.white38, fontSize: 12),
             ),
           ],
