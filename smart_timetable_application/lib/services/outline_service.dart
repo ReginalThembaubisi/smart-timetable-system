@@ -31,52 +31,24 @@ Example: [{"title": "Test 1", "date": "2026-03-20", "type": "Test", "time": "14:
 If no events are found, return an empty list: []
 """;
 
-  /// Extracts text locally from a PDF using pdf.js browser-interop to bypass WASM memory limits.
-  static Future<String> _extractTextFromPdfBytes(Uint8List bytes) async {
-    try {
-      if (kIsWeb) {
-        // Run the browser-native JS extraction logic explicitly to skip Flutter memory constraints
-        return await pdf_js.extractPdfText(bytes);
-      } else {
-         throw Exception("This version of Outline Scanner only supports Flutter Web. Contact admin.");
-      }
-    } catch (e) {
-      debugPrint('Browser JS PDF Extraction Error: $e');
-      throw Exception('The browser could not read the PDF file text. Ensure it is a valid text-based syllabus PDF.');
-    }
-  }
-
-  /// Extracts academic events directly from a PlatformFile using Gemini.
-  static Future<List<OutlineEvent>> extractEventsFromDocument(
-    PlatformFile file,
+  /// Extracts academic events directly from extracted PDF text using Gemini.
+  static Future<List<OutlineEvent>> extractEventsFromText(
+    String text,
     String apiKey, 
     String moduleCode
   ) async {
     if (apiKey.isEmpty) {
       throw Exception('Gemini API key is not configured. Please contact the administrator.');
     }
-    if (file.bytes == null) {
-      throw Exception('File bytes are empty. Ensure file was picked with `withData: true`.');
+    if (text.trim().isEmpty) {
+      throw Exception('The extracted text is empty. Ensure the syllabus PDF is readable text, not just scanned images.');
     }
 
     try {
-      final String extension = file.extension?.toLowerCase() ?? '';
-      String extractedText = '';
-
-      if (extension == 'pdf') {
-        extractedText = await _extractTextFromPdfBytes(file.bytes!);
-      } else {
-        throw Exception('Only PDFs are supported for local parsing right now. Please save your file as a PDF and try again.');
-      }
-
-      if (extractedText.trim().isEmpty) {
-        throw Exception('No readable text could be found inside this PDF. Is it just an image without text?');
-      }
-
       final model = GenerativeModel(model: _modelName, apiKey: apiKey);
 
       final parts = [
-        TextPart('$_prompt\n\nSyllabus Text to Analyze:\n---\n${extractedText.substring(0, extractedText.length.clamp(0, 50000))}\n---'),
+        TextPart('$_prompt\n\nSyllabus Text to Analyze:\n---\n${text.substring(0, text.length.clamp(0, 50000))}\n---'),
       ];
 
       final response = await model.generateContent([Content.multi(parts)]);

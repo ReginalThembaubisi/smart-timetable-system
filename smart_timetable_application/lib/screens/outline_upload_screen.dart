@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/outline_service.dart';
 import '../models/outline_event.dart';
@@ -9,6 +10,8 @@ import '../config/app_colors.dart';
 import '../services/local_storage_service.dart';
 import '../config/ai_config.dart';
 import 'package:intl/intl.dart';
+
+import '../services/pdf_js_interop.dart' if (dart.library.io) '../services/pdf_stub_interop.dart' as pdf_js;
 
 class OutlineUploadScreen extends StatefulWidget {
   final List<Module> modules;
@@ -23,7 +26,8 @@ class OutlineUploadScreen extends StatefulWidget {
 }
 
 class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
-  PlatformFile? _selectedFile;
+  String? _selectedFileName;
+  String? _extractedText;
   Module? _selectedModule;
   bool _isExtracting = false;
   List<OutlineEvent> _extractedEvents = [];
@@ -45,23 +49,49 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
   }
 
   Future<void> _pickFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-      withData: true, // Required for web to get bytes
-    );
+    if (kIsWeb) {
+      try {
+        final result = await pdf_js.pickAndExtractPdfText();
+        setState(() {
+          _selectedFileName = result['name'];
+          _extractedText = result['text'];
+        });
+      } catch (e) {
+        String msg = e.toString();
+        if (msg.contains('canc')) return; // ignore cancellations
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to read PDF: $msg')),
+        );
+      }
+    } else {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: false, // We don't read bytes on mobile to avoid memory crashes
+      );
 
-    if (result != null) {
-      setState(() {
-        _selectedFile = result.files.single;
-      });
+      if (result != null) {
+        setState(() {
+          _selectedFileName = result.files.single.name;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Syllabus Scanner is currently only optimized for the Web application.')),
+        );
+      }
     }
   }
 
   Future<void> _startExtraction() async {
-    if (_selectedFile == null || _selectedModule == null) {
+    if (_selectedFileName == null || _selectedModule == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a module and a PDF file first.')),
+      );
+      return;
+    }
+
+    if (_extractedText == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not find readable text in the selected file.')),
       );
       return;
     }
@@ -72,8 +102,8 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     });
 
     try {
-      final events = await OutlineService.extractEventsFromDocument(
-        _selectedFile!,
+      final events = await OutlineService.extractEventsFromText(
+        _extractedText!,
         AIConfig.geminiApiKey,
         _selectedModule!.moduleCode,
       );
@@ -249,15 +279,15 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    _selectedFile == null ? Icons.upload_file : Icons.check_circle,
+                    _selectedFileName == null ? Icons.upload_file : Icons.check_circle,
                     size: 40,
-                    color: _selectedFile == null ? Colors.white54 : Colors.greenAccent,
+                    color: _selectedFileName == null ? Colors.white54 : Colors.greenAccent,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _selectedFile == null 
+                    _selectedFileName == null 
                         ? 'Select PDF file' 
-                        : _selectedFile!.name,
+                        : _selectedFileName!,
                     style: const TextStyle(color: Colors.white70),
                     textAlign: TextAlign.center,
                   ),
