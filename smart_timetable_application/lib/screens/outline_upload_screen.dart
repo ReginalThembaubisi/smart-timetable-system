@@ -30,6 +30,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
   String? _extractedText;
   Module? _selectedModule;
   bool _isExtracting = false;
+  String? _pdfJobError;
   List<OutlineEvent> _extractedEvents = [];
   final _storageService = LocalStorageService();
   
@@ -49,49 +50,18 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
   }
 
   Future<void> _pickFile() async {
-    if (kIsWeb) {
-      try {
-        final result = await pdf_js.pickAndExtractPdfText();
-        setState(() {
-          _selectedFileName = result['name'];
-          _extractedText = result['text'];
-        });
-      } catch (e) {
-        String msg = e.toString();
-        if (msg.contains('canc')) return; // ignore cancellations
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to read PDF: $msg')),
-        );
-      }
-    } else {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-        withData: false, // We don't read bytes on mobile to avoid memory crashes
-      );
-
-      if (result != null) {
-        setState(() {
-          _selectedFileName = result.files.single.name;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Syllabus Scanner is currently only optimized for the Web application.')),
-        );
-      }
-    }
-  }
-
-  Future<void> _startExtraction() async {
-    if (_selectedFileName == null || _selectedModule == null) {
+    if (!kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a module and a PDF file first.')),
+        const SnackBar(
+          content: Text('Syllabus Scanner is only available on the web app.'),
+        ),
       );
       return;
     }
 
-    if (_extractedText == null) {
+    if (_selectedModule == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not find readable text in the selected file.')),
+        const SnackBar(content: Text('Please select a module first.')),
       );
       return;
     }
@@ -99,37 +69,66 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     setState(() {
       _isExtracting = true;
       _extractedEvents = [];
+      _selectedFileName = null;
+      _pdfJobError = null;
     });
 
     try {
-      final events = await OutlineService.extractEventsFromText(
-        _extractedText!,
-        AIConfig.geminiApiKey,
-        _selectedModule!.moduleCode,
+      // This call does: pick file -> extract text -> call Gemini -> return small result
+      // All inside JS. Only ~2KB result crosses the WASM bridge.
+      final result = await pdf_js.pickAndExtractAndAnalyzePdf(
+        geminiApiKey: AIConfig.geminiApiKey,
+        moduleCode: _selectedModule!.moduleCode,
       );
 
+      final fileName = result['name'] as String;
+      final rawEventsJson = result['events'] as String;
+
+      // Strip markdown fences Gemini sometimes wraps around JSON
+      final cleaned = rawEventsJson
+          .replaceAll(RegExp(r'```json\n?|^```\n?|```$', multiLine: true), '')
+          .trim();
+
+      final List<dynamic> decoded = jsonDecode(cleaned);
+      final events = decoded
+          .map((e) => OutlineEvent.fromJson(e as Map<String, dynamic>))
+          .toList();
+
       setState(() {
+        _selectedFileName = fileName;
         _extractedEvents = events;
         _isExtracting = false;
       });
+
+      if (events.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No dates found in this document. Try a different PDF.'),
+          ),
+        );
+      }
     } catch (e) {
       setState(() {
         _isExtracting = false;
+        _pdfJobError = e.toString();
       });
-      
-      String errorMessage = e.toString();
-      if (errorMessage.contains('Exception: ')) {
-        errorMessage = errorMessage.split('Exception: ').last;
-      } 
-      
+
+      final msg = e.toString();
+      if (msg.toLowerCase().contains('cancel')) return; // user cancelled, stay silent
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(errorMessage),
-          duration: const Duration(seconds: 5),
+          content: Text('Failed: $msg'),
+          duration: const Duration(seconds: 6),
           action: SnackBarAction(label: 'Dismiss', onPressed: () {}),
         ),
       );
     }
+  }
+
+  Future<void> _startExtraction() async {
+    // Everything now happens inside _pickFile().
+    // This method is intentionally empty to preserve button logic if needed.
   }
 
   Future<void> _saveEvents() async {

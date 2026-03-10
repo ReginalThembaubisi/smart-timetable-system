@@ -1,63 +1,104 @@
-window.pickAndExtractPdfText = async function () {
+window.pickAndExtractAndAnalyzePdf = async function (geminiApiKey, moduleCode) {
     return new Promise((resolve, reject) => {
-        // Create an invisible file input element
-        let input = document.createElement('input');
+        const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.pdf';
         input.style.display = 'none';
 
-        // Listen for file selection
         input.onchange = async (e) => {
-            let file = e.target.files[0];
+            const file = e.target.files[0];
             if (!file) {
                 reject('No file selected');
                 return;
             }
 
-            try {
-                // Read file directly into JS memory, bypassing Flutter WASM heap
-                let arrayBuffer = await file.arrayBuffer();
-                let bytes = new Uint8Array(arrayBuffer);
-
-                // Pass bytes to Mozilla's PDF.js
-                const loadingTask = pdfjsLib.getDocument({ data: bytes });
-                const pdf = await loadingTask.promise;
-                let maxPages = pdf.numPages;
-                let extractedText = '';
-
-                for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
-                    const page = await pdf.getPage(pageNo);
-                    const textContent = await page.getTextContent();
-
-                    // Join the text items with spaces
-                    const pageText = textContent.items.map(item => item.str).join(' ');
-                    extractedText += pageText + ' \n';
-                }
-
-                // Return both filename and text encoded as JSON string
-                const resultString = JSON.stringify({
-                    name: file.name,
-                    text: extractedText
-                });
-
-                resolve(resultString);
-
-            } catch (err) {
-                console.error('Error extracting PDF text via pdf.js:', err);
-                reject(err.toString());
+            // Clean up DOM immediately
+            if (document.body.contains(input)) {
+                document.body.removeChild(input);
             }
 
-            // Clean up the DOM node
-            document.body.removeChild(input);
+            try {
+                // ── STEP 1: Read file into JS ArrayBuffer (never touches WASM heap) ──
+                const arrayBuffer = await file.arrayBuffer();
+
+                // ── STEP 2: Extract text page-by-page with immediate cleanup ──
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                const pdf = await loadingTask.promise;
+                const numPages = pdf.numPages;
+                let fullText = '';
+
+                for (let pageNo = 1; pageNo <= numPages; pageNo++) {
+                    const page = await pdf.getPage(pageNo);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    fullText += pageText + '\n';
+                    page.cleanup(); // ← critical: frees decoded bitmap/canvas memory immediately
+                }
+
+                // ── STEP 3: Send text directly to Gemini from JS (never crosses WASM bridge) ──
+                const prompt = `You are an academic assistant. Extract all important dates, deadlines, tests, exams, assignments, and submission dates from this university module outline/syllabus.
+
+Module code: ${moduleCode}
+
+Return ONLY a valid JSON array. No markdown, no explanation, no code fences. Just raw JSON like this:
+[{"title":"Assignment 1 Due","date":"2025-03-15","description":"Submit via portal","type":"assignment"},...]
+
+Types must be one of: assignment, test, exam, project, lecture, other
+
+Syllabus text:
+${fullText}`;
+
+                const geminiResponse = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: {
+                                temperature: 0.1,
+                                maxOutputTokens: 2048,
+                            }
+                        })
+                    }
+                );
+
+                if (!geminiResponse.ok) {
+                    const errBody = await geminiResponse.text();
+                    reject(`Gemini API error ${geminiResponse.status}: ${errBody}`);
+                    return;
+                }
+
+                const geminiData = await geminiResponse.json();
+                const rawResult = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (!rawResult) {
+                    reject('Gemini returned an empty response.');
+                    return;
+                }
+
+                // ── STEP 4: Return only the small result + filename to Dart ──
+                // This is the ONLY thing that crosses the WASM bridge: ~2KB max
+                const finalPayload = JSON.stringify({
+                    name: file.name,
+                    events: rawResult  // raw string, Dart will parse it
+                });
+
+                resolve(finalPayload);
+
+            } catch (err) {
+                console.error('[pdf_js_extractor] Error:', err);
+                reject(err.toString());
+            }
         };
 
-        // Handle user cancelling the file picker dialogue (mostly works depending on browser)
         input.oncancel = () => {
-            document.body.removeChild(input);
+            if (document.body.contains(input)) {
+                document.body.removeChild(input);
+            }
             reject('User cancelled file selection');
         };
 
-        // Add to DOM and click it to open the picker dialog
         document.body.appendChild(input);
         input.click();
     });
