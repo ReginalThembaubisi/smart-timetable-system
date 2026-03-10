@@ -18,8 +18,16 @@ class NotificationService {
   
   // Initialize notification service
   static Future<void> initialize() async {
-    // Initialize timezone data
+    // Initialize timezone data (works on all platforms)
     tz.initializeTimeZones();
+
+    // Skip mobile-only initialization on web
+    if (kIsWeb) {
+      print('NotificationService: running on web, skipping mobile notifications');
+      _startNotificationTimer();
+      return;
+    }
+
     try {
       final tzResult = await FlutterTimezone.getLocalTimezone();
       // flutter_timezone v5.x returns TimezoneInfo instead of String
