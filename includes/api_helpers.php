@@ -207,6 +207,6 @@ function handleAPIError($e, $defaultMessage = 'An error occurred')
         $statusCode = 403;
     }
 
-    sendJSONResponse(false, null, $errorMessage, $statusCode);
+    sendJSONResponse(false, null, 'DEBUG: ' . $e->getMessage(), $statusCode);
 }
 ?>
