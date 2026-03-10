@@ -119,7 +119,414 @@ class ExportService {
     }
   }
 
-  /// Build the PDF document bytes.
+  // ─── PDF Grid Study Timetable Export ────────────────────────────────
+
+  /// Generate and share/print a wall-poster-style study plan grid PDF.
+  static Future<void> exportStudySessionsAsPDF({
+    required BuildContext context,
+    required Student student,
+    required List<StudySession> studySessions,
+  }) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          ),
+        ),
+      );
+
+      // Convert flat `List<StudySession>` into day -> time -> sessions structure
+      final Map<String, Map<String, List<StudySession>>> groupedData = {};
+
+      for (final session in studySessions) {
+        final day = session.dayOfWeek.isNotEmpty ? session.dayOfWeek : 'General';
+        String startTime = session.startTime.isNotEmpty ? session.startTime : '00:00';
+        if (startTime.length > 5) startTime = startTime.substring(0, 5);
+
+        if (!groupedData.containsKey(day)) {
+          groupedData[day] = {};
+        }
+        if (!groupedData[day]!.containsKey(startTime)) {
+          groupedData[day]![startTime] = [];
+        }
+        groupedData[day]![startTime]!.add(session);
+      }
+
+      final pdfBytes = await _buildStudySessionsPDF(student, groupedData);
+
+      if (context.mounted) Navigator.pop(context);
+
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: 'study_plan_${student.studentNumber}.pdf',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting study plan: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Build the Study Sessions PDF document bytes.
+  static Future<Uint8List> _buildStudySessionsPDF(
+    Student student,
+    Map<String, Map<String, List<StudySession>>> timetableData,
+  ) async {
+    final pdf = pw.Document();
+
+    final allTimeSlots = <String>{};
+    for (final dayData in timetableData.values) {
+      allTimeSlots.addAll(dayData.keys);
+    }
+    final sortedSlots = allTimeSlots.toList()
+      ..sort((a, b) => _timeToMinutes(a).compareTo(_timeToMinutes(b)));
+
+    const dayOrder = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday'
+    ];
+    final activeDays = dayOrder
+        .where((d) =>
+            timetableData.containsKey(d) && timetableData[d]!.isNotEmpty)
+        .toList();
+
+    if (activeDays.isEmpty || sortedSlots.isEmpty) {
+      pdf.addPage(pw.Page(
+        pageFormat: PdfPageFormat.a4.landscape,
+        build: (context) => pw.Center(
+          child: pw.Text(
+            'No study sessions available.',
+            style: pw.TextStyle(fontSize: 20),
+          ),
+        ),
+      ));
+      return pdf.save();
+    }
+
+    final slotRows = <_TimeSlotRow>[];
+    for (final slot in sortedSlots) {
+      String endTime = _addMinutes(slot, 60);
+      for (final day in activeDays) {
+        final sessions = timetableData[day]?[slot] ?? [];
+        for (final s in sessions) {
+          final sEnd = s.endTime.isNotEmpty ? s.endTime : endTime;
+          if (_timeToMinutes(sEnd) > _timeToMinutes(endTime)) {
+            endTime = sEnd;
+          }
+        }
+      }
+      slotRows.add(_TimeSlotRow(
+        startTime: _formatTimePretty(slot),
+        endTime: _formatTimePretty(endTime),
+      ));
+    }
+
+    final dayColors = <String, PdfColor>{
+      'Monday': const PdfColor.fromInt(0xFFE74C3C),
+      'Tuesday': const PdfColor.fromInt(0xFFE67E22),
+      'Wednesday': const PdfColor.fromInt(0xFFF39C12),
+      'Thursday': const PdfColor.fromInt(0xFF27AE60),
+      'Friday': const PdfColor.fromInt(0xFF2E5BBA),
+      'Saturday': const PdfColor.fromInt(0xFF8E44AD),
+      'Sunday': const PdfColor.fromInt(0xFF95A5A6),
+    };
+
+    PdfColor cellColor(String type) {
+      switch (type.toLowerCase()) {
+        case 'study':
+          return const PdfColor.fromInt(0xFFD6E4FF);
+        case 'revision':
+          return const PdfColor.fromInt(0xFFFFE8CC);
+        case 'exam_prep':
+        case 'exam':
+          return const PdfColor.fromInt(0xFFFFD6D6);
+        case 'assignment':
+          return const PdfColor.fromInt(0xFFD4EDDA);
+        default:
+          return const PdfColor.fromInt(0xFFE8E8FF);
+      }
+    }
+
+    final dayColumnCount = activeDays.length;
+    final timeColumnWidth = 65.0;
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.symmetric(
+                    vertical: 12, horizontal: 16),
+                decoration: pw.BoxDecoration(
+                  color: const PdfColor.fromInt(0xFF8E44AD), // Study Purple
+                  borderRadius: pw.BorderRadius.circular(8),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'Smart Study Plan',
+                          style: pw.TextStyle(
+                            fontSize: 20,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white,
+                          ),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          '${student.fullName}  •  ${student.studentNumber}',
+                          style: const pw.TextStyle(
+                            fontSize: 11,
+                            color: PdfColors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 12),
+
+              pw.Expanded(
+                child: pw.Table(
+                  border: pw.TableBorder.all(
+                    color: const PdfColor.fromInt(0xFFCCCCCC),
+                    width: 0.5,
+                  ),
+                  columnWidths: {
+                    0: pw.FixedColumnWidth(timeColumnWidth),
+                    for (int i = 0; i < dayColumnCount; i++)
+                      i + 1: const pw.FlexColumnWidth(1),
+                  },
+                  children: [
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColor.fromInt(0xFFF0F0F0),
+                      ),
+                      children: [
+                        pw.Container(
+                          height: 32,
+                          alignment: pw.Alignment.center,
+                          child: pw.Text(
+                            'Time',
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        ...activeDays.map((day) {
+                          return pw.Container(
+                            height: 32,
+                            alignment: pw.Alignment.center,
+                            decoration: pw.BoxDecoration(
+                              color: dayColors[day] ?? PdfColors.purple,
+                            ),
+                            child: pw.Text(
+                              day,
+                              style: pw.TextStyle(
+                                fontSize: 10,
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.white,
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+
+                    ...List.generate(sortedSlots.length, (rowIndex) {
+                      final slot = sortedSlots[rowIndex];
+                      final slotRow = slotRows[rowIndex];
+                      final isEvenRow = rowIndex % 2 == 0;
+
+                      return pw.TableRow(
+                        decoration: pw.BoxDecoration(
+                          color: isEvenRow
+                              ? PdfColors.white
+                              : const PdfColor.fromInt(0xFFFAFAFA),
+                        ),
+                        children: [
+                          pw.Container(
+                            padding: const pw.EdgeInsets.symmetric(
+                                vertical: 6, horizontal: 4),
+                            alignment: pw.Alignment.center,
+                            child: pw.Column(
+                              mainAxisAlignment:
+                                  pw.MainAxisAlignment.center,
+                              children: [
+                                pw.Text(
+                                  slotRow.startTime,
+                                  style: pw.TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: pw.FontWeight.bold,
+                                  ),
+                                ),
+                                pw.Text(
+                                  slotRow.endTime,
+                                  style: const pw.TextStyle(
+                                    fontSize: 7,
+                                    color: PdfColor.fromInt(0xFF888888),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          ...activeDays.map((day) {
+                            final sessions =
+                                timetableData[day]?[slot] ?? [];
+
+                            if (sessions.isEmpty) {
+                              return pw.Container(
+                                padding: const pw.EdgeInsets.all(4),
+                              );
+                            }
+
+                            return pw.Container(
+                              padding: const pw.EdgeInsets.all(3),
+                              child: pw.Column(
+                                crossAxisAlignment:
+                                    pw.CrossAxisAlignment.stretch,
+                                children: sessions.map((session) {
+                                  return pw.Container(
+                                    margin: sessions.length > 1
+                                        ? const pw.EdgeInsets.only(
+                                            bottom: 2)
+                                        : pw.EdgeInsets.zero,
+                                    padding: const pw.EdgeInsets.symmetric(
+                                        vertical: 4, horizontal: 5),
+                                    decoration: pw.BoxDecoration(
+                                      color:
+                                          cellColor(session.sessionType),
+                                      borderRadius:
+                                          pw.BorderRadius.circular(4),
+                                      border: pw.Border.all(
+                                        color: const PdfColor.fromInt(
+                                            0xFFDDDDDD),
+                                        width: 0.5,
+                                      ),
+                                    ),
+                                    child: pw.Column(
+                                      crossAxisAlignment:
+                                          pw.CrossAxisAlignment.start,
+                                      children: [
+                                        pw.Text(
+                                          session.title.length > 20
+                                              ? session.title
+                                                  .substring(0, 20)
+                                              : session.title,
+                                          style: pw.TextStyle(
+                                            fontSize: 7,
+                                            fontWeight:
+                                                pw.FontWeight.bold,
+                                          ),
+                                          maxLines: 1,
+                                        ),
+                                        pw.Text(
+                                          session.moduleName.length > 28
+                                              ? '${session.moduleName.substring(0, 25)}...'
+                                              : session.moduleName,
+                                          style: const pw.TextStyle(
+                                            fontSize: 6,
+                                          ),
+                                          maxLines: 2,
+                                        ),
+                                        pw.SizedBox(height: 1),
+                                        if (session.venue != null &&
+                                            session.venue!.isNotEmpty)
+                                          pw.Text(
+                                            session.venue!,
+                                            style: pw.TextStyle(
+                                              fontSize: 6,
+                                              fontWeight:
+                                                  pw.FontWeight.bold,
+                                              color:
+                                                  const PdfColor.fromInt(
+                                                      0xFF555555),
+                                            ),
+                                            maxLines: 1,
+                                          ),
+                                        if (session.sessionType.isNotEmpty)
+                                          pw.Text(
+                                            session.sessionType
+                                                .toUpperCase()
+                                                .replaceAll('_', ' '),
+                                            style: const pw.TextStyle(
+                                              fontSize: 5,
+                                              color: PdfColor.fromInt(
+                                                  0xFF777777),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            );
+                          }),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 8),
+
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Generated by Smart Timetable App',
+                    style: const pw.TextStyle(
+                      fontSize: 7,
+                      color: PdfColor.fromInt(0xFF999999),
+                    ),
+                  ),
+                  pw.Text(
+                    'Printed: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+                    style: const pw.TextStyle(
+                      fontSize: 7,
+                      color: PdfColor.fromInt(0xFF999999),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  /// Build the Class Timetable PDF document bytes.
   static Future<Uint8List> _buildTimetablePDF(
     Student student,
     Map<String, Map<String, List<Session>>> timetableData,
@@ -593,6 +1000,25 @@ class ExportService {
                         context: context,
                         student: student,
                         timetableData: timetableData,
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // PDF Study Sessions Grid
+                  _buildExportOption(
+                    context,
+                    'Print Study Plan (PDF)',
+                    'Beautiful grid of your study sessions to print',
+                    Icons.dashboard_customize,
+                    const Color(0xFF8E44AD), // Purple
+                    () {
+                      Navigator.pop(context);
+                      exportStudySessionsAsPDF(
+                        context: context,
+                        student: student,
+                        studySessions: studySessions,
                       );
                     },
                   ),
