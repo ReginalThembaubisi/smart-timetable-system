@@ -10,6 +10,7 @@ import '../config/app_colors.dart';
 import '../services/local_storage_service.dart';
 import '../config/ai_config.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 
 import '../services/pdf_js_interop.dart' if (dart.library.io) '../services/pdf_stub_interop.dart' as pdf_js;
 
