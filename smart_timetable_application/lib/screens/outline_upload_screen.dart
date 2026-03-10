@@ -74,8 +74,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
 
     try {
       final events = await OutlineService.extractEventsFromDocument(
-        _selectedFile!.bytes!,
-        _selectedFile!.name,
+        _selectedFile!,
         AIConfig.geminiApiKey,
         _selectedModule!.moduleCode,
       );
@@ -94,10 +93,6 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
         errorMessage = errorMessage.split('Exception: ').last;
       } 
       
-      if (errorMessage.contains('minified:')) {
-        errorMessage = 'Network error: Could not reach the server. Please check your connection or try again later.';
-      }
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(errorMessage),

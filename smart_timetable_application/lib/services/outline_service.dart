@@ -1,83 +1,14 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/outline_event.dart';
-import '../config/app_config.dart';
 
 class OutlineService {
   static const String _modelName = 'gemini-1.5-flash';
 
-  /// Uploads the DOCX to the PHP backend for safe native server-side extraction
-  static Future<String> _extractTextFromDocx(Uint8List bytes, String fileName) async {
-    try {
-      final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/extract_docx_text.php');
-      var request = http.MultipartRequest('POST', uri);
-      
-      request.files.add(http.MultipartFile.fromBytes(
-        'file',
-        bytes,
-        filename: fileName,
-      ));
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true && data['data'] != null) {
-          return data['data']['text'] ?? '';
-        } else {
-          throw Exception(data['message'] ?? 'Failed to extract text on server.');
-        }
-      } else {
-        throw Exception('Server error during DOCX parsing: HTTP ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      debugPrint('DOCX Server Parsing Error: $e');
-      if (e.toString().contains('minified:')) {
-        throw Exception('Network or CORS error connecting to backend. Please ensure the server allows web requests.');
-      }
-      throw Exception('Could not extract DOCX text: $e');
-    }
-  }
-
-  /// Uploads the PDF to the PHP backend for text extraction
-  static Future<String> _extractTextFromPdf(Uint8List bytes, String fileName) async {
-    try {
-      final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/extract_pdf_text.php');
-      var request = http.MultipartRequest('POST', uri);
-      
-      request.files.add(http.MultipartFile.fromBytes(
-        'file',
-        bytes,
-        filename: fileName,
-      ));
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true && data['data'] != null) {
-          return data['data']['text'] ?? '';
-        } else {
-          throw Exception(data['message'] ?? 'Failed to extract text on server.');
-        }
-      } else {
-        throw Exception('Server error during PDF parsing: HTTP ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      debugPrint('PDF Server Parsing Error: $e');
-      if (e.toString().contains('minified:')) {
-        throw Exception('Network or CORS error connecting to backend. Please ensure the server allows web requests.');
-      }
-      throw Exception('Could not extract PDF text. Does the file contain readable text? Error: $e');
-    }
-  }
-
   static const String _prompt = """
-You are an academic assistant for a university student. Your goal is to find all important assessment dates.
+You are an academic assistant for a university student. Your goal is to find all important assessment dates from the attached syllabus/outline.
 
 Extract events such as:
 - Tests (Test 1, Semester Test, Class Test, etc.)
@@ -97,50 +28,48 @@ Example: [{"title": "Test 1", "date": "2026-03-20", "type": "Test", "time": "14:
 If no events are found, return an empty list: []
 """;
 
-  /// Extracts academic events from a PDF or DOCX file using Gemini AI.
+  /// Extracts academic events directly from a PlatformFile using Gemini's native Document processing.
   static Future<List<OutlineEvent>> extractEventsFromDocument(
-    Uint8List bytes,
-    String fileName,
+    PlatformFile file,
     String apiKey, 
     String moduleCode
   ) async {
     if (apiKey.isEmpty) {
       throw Exception('Gemini API key is not configured. Please contact the administrator.');
     }
+    if (file.bytes == null) {
+      throw Exception('File bytes are empty. Ensure file was picked with `withData: true`.');
+    }
 
     try {
-      final String extension = fileName.split('.').last.toLowerCase();
+      final String extension = file.extension?.toLowerCase() ?? '';
       final model = GenerativeModel(model: _modelName, apiKey: apiKey);
 
-      List<Part> parts;
-
+      // Determine MIME Type for Gemini
+      String mimeType;
       if (extension == 'pdf') {
-        // Upload the PDF to the backend to get raw text, bypassing web limit/minified issues with Gemini direct docs
-        final text = await _extractTextFromPdf(bytes, fileName);
-        if (text.trim().isEmpty) {
-          throw Exception('No readable text could be extracted from the PDF file.');
-        }
-        parts = [
-          TextPart('$_prompt\n\nExtracted text from module outline PDF:\n---\n${text.substring(0, text.length.clamp(0, 15000))}\n---'),
-        ];
+        mimeType = 'application/pdf';
       } else if (extension == 'docx') {
-        // Upload the DOCX file to the PHP backend for extraction, then send as text prompt
-        final text = await _extractTextFromDocx(bytes, fileName);
-        if (text.trim().isEmpty) {
-          throw Exception('No readable text could be extracted from the DOCX file.');
-        }
-        parts = [
-          TextPart('$_prompt\n\nExtracted text from module outline DOCX:\n---\n${text.substring(0, text.length.clamp(0, 15000))}\n---'),
-        ];
+        mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      } else if (extension == 'txt') {
+        mimeType = 'text/plain';
       } else {
-        throw Exception('Unsupported file format ($extension). Please upload a PDF or DOCX.');
+        throw Exception('Unsupported file format ($extension). Please upload a PDF, DOCX, or TXT file.');
       }
+
+      // Build the raw data part for Gemini
+      final documentPart = DataPart(mimeType, file.bytes!);
+      
+      final parts = [
+        TextPart(_prompt),
+        documentPart,
+      ];
 
       final response = await model.generateContent([Content.multi(parts)]);
       
       final responseText = response.text;
       if (responseText == null || responseText.isEmpty) {
-        throw Exception('AI returned an empty response. Please try again.');
+        throw Exception('AI returned an empty response. The document might not contain easily readable text.');
       }
 
       // Strip any markdown code fences
@@ -159,9 +88,12 @@ If no events are found, return an empty list: []
       }).toList();
 
     } catch (e, stackTrace) {
-      debugPrint('Error in OutlineService: $e\n$stackTrace');
-      if (e.toString().contains('minified:')) {
-        throw Exception('An unexpected web error occurred. If you uploaded a DOC, please convert it to PDF or DOCX first.');
+      debugPrint('Error in OutlineService Direct Extract: $e\n$stackTrace');
+      
+      // Provide clearer error messaging for WASM/Browser constraints
+      String errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('minified:') || errorStr.contains('out of memory')) {
+        throw Exception('File too large for your browser to process. Please try a smaller PDF or use the mobile app.');
       }
       rethrow;
     }
