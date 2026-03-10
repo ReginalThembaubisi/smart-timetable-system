@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../models/outline_event.dart';
 
 class OutlineService {
@@ -27,24 +29,51 @@ Example: [{"title": "Test 1", "date": "2026-03-20", "type": "Test", "time": "14:
 If no events are found, return an empty list: []
 """;
 
-  /// Extracts academic events directly from pasted text using Gemini.
-  static Future<List<OutlineEvent>> extractEventsFromText(
-    String text,
+  /// Extracts text locally from a PDF using Syncfusion to bypass WASM memory limits.
+  static String _extractTextFromPdfBytes(Uint8List bytes) {
+    try {
+      final PdfDocument document = PdfDocument(inputBytes: bytes);
+      final PdfTextExtractor extractor = PdfTextExtractor(document);
+      final String text = extractor.extractText();
+      document.dispose();
+      return text;
+    } catch (e) {
+      debugPrint('Syncfusion PDF Extraction Error: $e');
+      throw Exception('Could not read the PDF file locally. Please ensure it is a valid, readable syllabus PDF.');
+    }
+  }
+
+  /// Extracts academic events directly from a PlatformFile using Gemini.
+  static Future<List<OutlineEvent>> extractEventsFromDocument(
+    PlatformFile file,
     String apiKey, 
     String moduleCode
   ) async {
     if (apiKey.isEmpty) {
       throw Exception('Gemini API key is not configured. Please contact the administrator.');
     }
-    if (text.trim().isEmpty) {
-      throw Exception('Please paste some text from your syllabus first.');
+    if (file.bytes == null) {
+      throw Exception('File bytes are empty. Ensure file was picked with `withData: true`.');
     }
 
     try {
+      final String extension = file.extension?.toLowerCase() ?? '';
+      String extractedText = '';
+
+      if (extension == 'pdf') {
+        extractedText = _extractTextFromPdfBytes(file.bytes!);
+      } else {
+        throw Exception('Only PDFs are supported for local parsing right now. Please save your file as a PDF and try again.');
+      }
+
+      if (extractedText.trim().isEmpty) {
+        throw Exception('No readable text could be found inside this PDF. Is it just an image without text?');
+      }
+
       final model = GenerativeModel(model: _modelName, apiKey: apiKey);
 
       final parts = [
-        TextPart('$_prompt\n\nSyllabus Text to Analyze:\n---\n${text.substring(0, text.length.clamp(0, 50000))}\n---'),
+        TextPart('$_prompt\n\nSyllabus Text to Analyze:\n---\n${extractedText.substring(0, extractedText.length.clamp(0, 50000))}\n---'),
       ];
 
       final response = await model.generateContent([Content.multi(parts)]);

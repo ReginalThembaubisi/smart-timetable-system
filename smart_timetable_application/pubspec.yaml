@@ -72,6 +72,7 @@ dependencies:
   flutter_lints: ^6.0.0
   flutter_dotenv: ^6.0.0
   archive: ^4.0.9
+  syncfusion_flutter_pdf: ^31.1.19
 
 flutter:
   uses-material-design: true
