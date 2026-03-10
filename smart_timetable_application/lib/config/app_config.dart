@@ -3,7 +3,7 @@ class AppConfig {
   // Default to Railway production URL (no /admin prefix - Railway serves from root)
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://web-production-f8792.up.railway.app',
+    defaultValue: 'https://web-production-ffbb.up.railway.app',
   );
 
   // Fallback URLs (used automatically by ApiService)
@@ -11,7 +11,7 @@ class AppConfig {
   static const String apiBaseUrlEmulator = 'http://10.0.2.2:8090';
   static const String apiBaseUrlLocalhost = 'http://localhost:8090';
   // Railway production URL as fallback
-  static const String apiBaseUrlRailway = 'https://web-production-f8792.up.railway.app';
+  static const String apiBaseUrlRailway = 'https://web-production-ffbb.up.railway.app';
   
   // Other app configuration constants can be added here
   static const String appName = 'Smart Timetable';

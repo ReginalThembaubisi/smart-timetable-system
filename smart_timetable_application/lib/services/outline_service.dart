@@ -42,6 +42,40 @@ class OutlineService {
     }
   }
 
+  /// Uploads the PDF to the PHP backend for text extraction
+  static Future<String> _extractTextFromPdf(Uint8List bytes, String fileName) async {
+    try {
+      final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/extract_pdf_text.php');
+      var request = http.MultipartRequest('POST', uri);
+      
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: fileName,
+      ));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          return data['data']['text'] ?? '';
+        } else {
+          throw Exception(data['message'] ?? 'Failed to extract text on server.');
+        }
+      } else {
+        throw Exception('Server error during PDF parsing: HTTP ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('PDF Server Parsing Error: $e');
+      if (e.toString().contains('minified:')) {
+        throw Exception('Network or CORS error connecting to backend. Please ensure the server allows web requests.');
+      }
+      throw Exception('Could not extract PDF text. Does the file contain readable text? Error: $e');
+    }
+  }
+
   static const String _prompt = """
 You are an academic assistant for a university student. Your goal is to find all important assessment dates.
 
@@ -81,19 +115,22 @@ If no events are found, return an empty list: []
       List<Part> parts;
 
       if (extension == 'pdf') {
-        // PDFs work natively as inline DataPart with Gemini
+        // Upload the PDF to the backend to get raw text, bypassing web limit/minified issues with Gemini direct docs
+        final text = await _extractTextFromPdf(bytes, fileName);
+        if (text.trim().isEmpty) {
+          throw Exception('No readable text could be extracted from the PDF file.');
+        }
         parts = [
-          TextPart(_prompt + '\n\nPlease analyze the attached PDF document.'),
-          DataPart('application/pdf', bytes),
+          TextPart('$_prompt\n\nExtracted text from module outline PDF:\n---\n${text.substring(0, text.length.clamp(0, 15000))}\n---'),
         ];
       } else if (extension == 'docx') {
         // Upload the DOCX file to the PHP backend for extraction, then send as text prompt
         final text = await _extractTextFromDocx(bytes, fileName);
         if (text.trim().isEmpty) {
-          throw Exception('No text could be extracted from the DOCX file.');
+          throw Exception('No readable text could be extracted from the DOCX file.');
         }
         parts = [
-          TextPart('$_prompt\n\nExtracted text from module outline:\n---\n${text.substring(0, text.length.clamp(0, 15000))}\n---'),
+          TextPart('$_prompt\n\nExtracted text from module outline DOCX:\n---\n${text.substring(0, text.length.clamp(0, 15000))}\n---'),
         ];
       } else {
         throw Exception('Unsupported file format ($extension). Please upload a PDF or DOCX.');

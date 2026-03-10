@@ -92,8 +92,10 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       String errorMessage = e.toString();
       if (errorMessage.contains('Exception: ')) {
         errorMessage = errorMessage.split('Exception: ').last;
-      } else if (errorMessage.contains('minified:')) {
-        errorMessage = 'Network or API error occurred. Try saving your document as a PDF.';
+      } 
+      
+      if (errorMessage.contains('minified:')) {
+        errorMessage = 'Network error: Could not reach the server. Please check your connection or try again later.';
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
