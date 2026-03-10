@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -11,74 +10,6 @@ import '../models/study_session.dart';
 import '../screens/session.dart';
 
 class ExportService {
-  // ─── CSV Export ──────────────────────────────────────────────────────
-
-  static Future<void> exportStudySessionsAsCSV({
-    required BuildContext context,
-    required Student student,
-    required List<StudySession> studySessions,
-  }) async {
-    try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-          ),
-        ),
-      );
-
-      final csvContent = _generateStudySessionsCSV(student, studySessions);
-      final directory = await getTemporaryDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final filename =
-          'study_sessions_${student.studentNumber}_$timestamp.csv';
-      final file = File('${directory.path}/$filename');
-      await file.writeAsString(csvContent);
-
-      Navigator.pop(context);
-
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'My Study Sessions - ${student.fullName}',
-        subject: 'Study Sessions Export',
-      );
-    } catch (e) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error exporting study sessions: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
-  }
-
-  static String _generateStudySessionsCSV(
-      Student student, List<StudySession> studySessions) {
-    final buffer = StringBuffer();
-    buffer.writeln(
-        'Title,Module Code,Module Name,Day,Start Time,End Time,Venue,Session Type,Notes,Duration (minutes),Created Date');
-    for (final session in studySessions) {
-      buffer.writeln([
-        '"${session.title}"',
-        '"${session.moduleCode}"',
-        '"${session.moduleName}"',
-        '"${session.dayOfWeek}"',
-        '"${session.startTime}"',
-        '"${session.endTime}"',
-        '"${session.venue ?? ''}"',
-        '"${session.sessionType}"',
-        '"${session.notes ?? ''}"',
-        '${session.duration ?? 0}',
-        '"${session.createdAt.toIso8601String()}"',
-      ].join(','));
-    }
-    return buffer.toString();
-  }
-
   // ─── PDF Grid Timetable Export ───────────────────────────────────────
 
   /// Generate and share/print a wall-poster-style timetable grid PDF.
@@ -1016,25 +947,6 @@ class ExportService {
                     () {
                       Navigator.pop(context);
                       exportStudySessionsAsPDF(
-                        context: context,
-                        student: student,
-                        studySessions: studySessions,
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // CSV Study Sessions
-                  _buildExportOption(
-                    context,
-                    'Export Study Sessions (CSV)',
-                    'Download your study sessions as a spreadsheet',
-                    Icons.table_chart,
-                    Colors.green,
-                    () {
-                      Navigator.pop(context);
-                      exportStudySessionsAsCSV(
                         context: context,
                         student: student,
                         studySessions: studySessions,
