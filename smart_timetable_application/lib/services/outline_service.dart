@@ -10,18 +10,25 @@ class OutlineService {
   /// Extracts text from a DOCX file (which is a ZIP with word/document.xml inside).
   static String _extractTextFromDocx(Uint8List bytes) {
     try {
-      final archive = ZipDecoder().decodeBytes(bytes);
+      // Create a clean copy of the bytes to avoid TypedData view errors during WASM minification
+      final cleanBytes = Uint8List.fromList(bytes.toList());
+      final archive = ZipDecoder().decodeBytes(cleanBytes);
+      
       final docXml = archive.files.firstWhere(
         (f) => f.name == 'word/document.xml',
-        orElse: () => throw Exception('Invalid DOCX file — word/document.xml not found.'),
+        orElse: () => throw Exception('Invalid DOCX: word/document.xml not found.'),
       );
-      final xmlContent = utf8.decode(docXml.content as List<int>);
+      
+      final contentBytes = docXml.content as List<int>;
+      final xmlContent = utf8.decode(contentBytes, allowMalformed: true);
+      
       // Strip XML tags, keep text content
       final text = xmlContent.replaceAll(RegExp(r'<[^>]+>'), ' ');
       // Collapse whitespace
       return text.replaceAll(RegExp(r'\s+'), ' ').trim();
     } catch (e) {
-      throw Exception('Could not read DOCX: $e');
+      debugPrint('DOCX Parsing Error: $e');
+      throw Exception('Could not read DOCX file data: $e');
     }
   }
 
