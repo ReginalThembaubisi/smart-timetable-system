@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../models/outline_event.dart';
+
+// Use conditional imports to prevent crashing on iOS/Android devices where dart:js is missing.
+import 'pdf_js_interop.dart' if (dart.library.io) 'pdf_stub_interop.dart' as pdf_js;
 
 class OutlineService {
   static const String _modelName = 'gemini-1.5-flash';
@@ -29,17 +31,18 @@ Example: [{"title": "Test 1", "date": "2026-03-20", "type": "Test", "time": "14:
 If no events are found, return an empty list: []
 """;
 
-  /// Extracts text locally from a PDF using Syncfusion to bypass WASM memory limits.
-  static String _extractTextFromPdfBytes(Uint8List bytes) {
+  /// Extracts text locally from a PDF using pdf.js browser-interop to bypass WASM memory limits.
+  static Future<String> _extractTextFromPdfBytes(Uint8List bytes) async {
     try {
-      final PdfDocument document = PdfDocument(inputBytes: bytes);
-      final PdfTextExtractor extractor = PdfTextExtractor(document);
-      final String text = extractor.extractText();
-      document.dispose();
-      return text;
+      if (kIsWeb) {
+        // Run the browser-native JS extraction logic explicitly to skip Flutter memory constraints
+        return await pdf_js.extractPdfText(bytes);
+      } else {
+         throw Exception("This version of Outline Scanner only supports Flutter Web. Contact admin.");
+      }
     } catch (e) {
-      debugPrint('Syncfusion PDF Extraction Error: $e');
-      throw Exception('Could not read the PDF file locally. Please ensure it is a valid, readable syllabus PDF.');
+      debugPrint('Browser JS PDF Extraction Error: $e');
+      throw Exception('The browser could not read the PDF file text. Ensure it is a valid text-based syllabus PDF.');
     }
   }
 
@@ -61,7 +64,7 @@ If no events are found, return an empty list: []
       String extractedText = '';
 
       if (extension == 'pdf') {
-        extractedText = _extractTextFromPdfBytes(file.bytes!);
+        extractedText = await _extractTextFromPdfBytes(file.bytes!);
       } else {
         throw Exception('Only PDFs are supported for local parsing right now. Please save your file as a PDF and try again.');
       }
