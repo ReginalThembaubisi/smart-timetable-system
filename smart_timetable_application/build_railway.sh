@@ -36,6 +36,10 @@ if [ -z "$GEMINI_API_KEY_VAR" ]; then
   echo "Warning: GEMINI_API_KEY environment variable is not set!"
 fi
 
+# Flutter needs the .env file to exist because it's declared in pubspec.yaml assets,
+# even though we are relying on --dart-define for Railway injection.
+touch .env
+
 flutter build web --release \
   --dart-define=API_BASE_URL="$API_BASE_URL_VAR" \
   --dart-define=GEMINI_API_KEY="$GEMINI_API_KEY_VAR"
