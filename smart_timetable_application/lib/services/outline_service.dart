@@ -1,34 +1,41 @@
 import 'dart:convert';
-import 'package:archive/archive.dart';
+import 'package:http/http.dart' as http;
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter/foundation.dart';
 import '../models/outline_event.dart';
+import '../config/app_config.dart';
 
 class OutlineService {
   static const String _modelName = 'gemini-1.5-flash';
 
-  /// Extracts text from a DOCX file (which is a ZIP with word/document.xml inside).
-  static String _extractTextFromDocx(Uint8List bytes) {
+  /// Uploads the DOCX to the PHP backend for safe native server-side extraction
+  static Future<String> _extractTextFromDocx(Uint8List bytes, String fileName) async {
     try {
-      // Create a clean copy of the bytes to avoid TypedData view errors during WASM minification
-      final cleanBytes = Uint8List.fromList(bytes.toList());
-      final archive = ZipDecoder().decodeBytes(cleanBytes);
+      final uri = Uri.parse('${AppConfig.apiBaseUrl}/extract_docx_text.php');
+      var request = http.MultipartRequest('POST', uri);
       
-      final docXml = archive.files.firstWhere(
-        (f) => f.name == 'word/document.xml',
-        orElse: () => throw Exception('Invalid DOCX: word/document.xml not found.'),
-      );
-      
-      final contentBytes = docXml.content as List<int>;
-      final xmlContent = utf8.decode(contentBytes, allowMalformed: true);
-      
-      // Strip XML tags, keep text content
-      final text = xmlContent.replaceAll(RegExp(r'<[^>]+>'), ' ');
-      // Collapse whitespace
-      return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: fileName,
+      ));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          return data['data']['text'] ?? '';
+        } else {
+          throw Exception(data['message'] ?? 'Failed to extract text on server.');
+        }
+      } else {
+        throw Exception('Server error during DOCX parsing: ${response.statusCode}');
+      }
     } catch (e) {
-      debugPrint('DOCX Parsing Error: $e');
-      throw Exception('Could not read DOCX file data: $e');
+      debugPrint('DOCX Server Parsing Error: $e');
+      throw Exception('Could not extract DOCX text: $e');
     }
   }
 
@@ -77,8 +84,8 @@ If no events are found, return an empty list: []
           DataPart('application/pdf', bytes),
         ];
       } else if (extension == 'docx') {
-        // Extract text from the DOCX ZIP archive, then send as text prompt
-        final text = _extractTextFromDocx(bytes);
+        // Upload the DOCX file to the PHP backend for extraction, then send as text prompt
+        final text = await _extractTextFromDocx(bytes, fileName);
         if (text.trim().isEmpty) {
           throw Exception('No text could be extracted from the DOCX file.');
         }
