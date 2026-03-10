@@ -7,8 +7,17 @@ import 'models/student.dart';
 import 'config/app_theme.dart';
 import 'config/app_colors.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Load environment variables securely
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint("Note: No .env file found. Using dart-define fallbacks if available.");
+  }
   
   // Initialize notification service
   await NotificationService.initialize();

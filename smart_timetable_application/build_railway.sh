@@ -27,11 +27,18 @@ echo "--- Installing Flutter dependencies ---"
 flutter pub get
 
 echo "--- Building Flutter web app ---"
-# Use Railway's API_BASE_URL environment variable, with fallback (NO /admin - backend serves from root)
+# Use Railway's environment variables
 API_BASE_URL_VAR=${API_BASE_URL:-"https://web-production-f8792.up.railway.app"}
+GEMINI_API_KEY_VAR=${GEMINI_API_KEY:-""}
 echo "Building with API_BASE_URL: $API_BASE_URL_VAR"
 
-flutter build web --release --dart-define=API_BASE_URL="$API_BASE_URL_VAR"
+if [ -z "$GEMINI_API_KEY_VAR" ]; then
+  echo "Warning: GEMINI_API_KEY environment variable is not set!"
+fi
+
+flutter build web --release \
+  --dart-define=API_BASE_URL="$API_BASE_URL_VAR" \
+  --dart-define=GEMINI_API_KEY="$GEMINI_API_KEY_VAR"
 
 echo "--- Flutter web build completed ---"
 echo "Build output: $(pwd)/build/web"
