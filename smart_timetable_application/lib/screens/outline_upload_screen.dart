@@ -88,8 +88,20 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       setState(() {
         _isExtracting = false;
       });
+      
+      String errorMessage = e.toString();
+      if (errorMessage.contains('Exception: ')) {
+        errorMessage = errorMessage.split('Exception: ').last;
+      } else if (errorMessage.contains('minified:')) {
+        errorMessage = 'Network or API error occurred. Try saving your document as a PDF.';
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Extraction failed: $e')),
+        SnackBar(
+          content: Text(errorMessage),
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(label: 'Dismiss', onPressed: () {}),
+        ),
       );
     }
   }
@@ -256,6 +268,11 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                 ],
               ),
             ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Note: For older Word files (.doc), please "Save As PDF" before uploading.',
+            style: TextStyle(color: Colors.white54, fontSize: 12, fontStyle: FontStyle.italic),
           ),
           const SizedBox(height: 24),
 

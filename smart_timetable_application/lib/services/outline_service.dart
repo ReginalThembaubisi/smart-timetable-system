@@ -11,7 +11,7 @@ class OutlineService {
   /// Uploads the DOCX to the PHP backend for safe native server-side extraction
   static Future<String> _extractTextFromDocx(Uint8List bytes, String fileName) async {
     try {
-      final uri = Uri.parse('${AppConfig.apiBaseUrl}/extract_docx_text.php');
+      final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/extract_docx_text.php');
       var request = http.MultipartRequest('POST', uri);
       
       request.files.add(http.MultipartFile.fromBytes(
@@ -31,10 +31,13 @@ class OutlineService {
           throw Exception(data['message'] ?? 'Failed to extract text on server.');
         }
       } else {
-        throw Exception('Server error during DOCX parsing: ${response.statusCode}');
+        throw Exception('Server error during DOCX parsing: HTTP ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       debugPrint('DOCX Server Parsing Error: $e');
+      if (e.toString().contains('minified:')) {
+        throw Exception('Network or CORS error connecting to backend. Please ensure the server allows web requests.');
+      }
       throw Exception('Could not extract DOCX text: $e');
     }
   }
@@ -118,8 +121,11 @@ If no events are found, return an empty list: []
         return OutlineEvent.fromJson(map);
       }).toList();
 
-    } catch (e) {
-      debugPrint('Error in OutlineService: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Error in OutlineService: $e\n$stackTrace');
+      if (e.toString().contains('minified:')) {
+        throw Exception('An unexpected web error occurred. If you uploaded a DOC, please convert it to PDF or DOCX first.');
+      }
       rethrow;
     }
   }
