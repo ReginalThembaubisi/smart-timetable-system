@@ -295,12 +295,20 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     try {
       final data = await ApiService.getStudentExamNotifications(widget.student.studentId);
       if (data['success'] == true) {
-        final notificationData = data['notifications'] ?? data['data'] ?? [];
-        final notifications = (notificationData as List)
+        // API wraps response as: { success: true, data: { notifications: [...] } }
+        final dataMap = data['data'];
+        List<dynamic> notificationList = [];
+        if (dataMap is Map) {
+          final raw = dataMap['notifications'];
+          if (raw is List) notificationList = raw;
+        } else if (dataMap is List) {
+          notificationList = dataMap;
+        }
+        final unread = notificationList
             .where((n) => n['is_read'] == 0 || n['is_read'] == false)
             .toList();
         setState(() {
-          examNotificationCount = notifications.length;
+          examNotificationCount = unread.length;
         });
       }
     } catch (e) {
