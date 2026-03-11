@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/outline_event.dart';
 import '../models/module.dart';
 import '../widgets/glass_card.dart';
@@ -7,82 +8,60 @@ import '../config/app_colors.dart';
 import '../services/local_storage_service.dart';
 import '../services/outline_service.dart';
 import '../config/ai_config.dart';
-import 'package:intl/intl.dart';
-import '../services/web_file_picker.dart' if (dart.library.io) '../services/web_file_picker_stub.dart' as web_picker;
 
 class OutlineUploadScreen extends StatefulWidget {
   final List<Module> modules;
-  
-  const OutlineUploadScreen({
-    Key? key,
-    required this.modules,
-  }) : super(key: key);
+
+  const OutlineUploadScreen({super.key, required this.modules});
 
   @override
   State<OutlineUploadScreen> createState() => _OutlineUploadScreenState();
 }
 
 class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
-  String? _selectedFileName;
+  final _textController = TextEditingController();
   Module? _selectedModule;
-  bool _isExtracting = false;
-  String? _pdfJobError;
+  bool _isAnalyzing = false;
+  String? _errorMessage;
   List<OutlineEvent> _extractedEvents = [];
   final _storageService = LocalStorageService();
-  
+
   @override
   void initState() {
     super.initState();
-    _initStorage();
-  }
-
-  Future<void> _initStorage() async {
-    await _storageService.initialize();
+    _storageService.initialize();
   }
 
   @override
   void dispose() {
+    _textController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickFile() async {
+  Future<void> _analyze() async {
     if (_selectedModule == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a module first.')),
-      );
+      _snack('Please select a module first.');
+      return;
+    }
+    final text = _textController.text.trim();
+    if (text.isEmpty) {
+      _snack('Please paste your syllabus text first.');
       return;
     }
     if (AIConfig.geminiApiKey.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Gemini API key is missing. Contact your administrator.'),
-          duration: Duration(seconds: 6),
-        ),
-      );
+      _snack('Gemini API key is missing. Contact your administrator.', seconds: 6);
       return;
     }
 
-    // Wrap everything — including the file picker — in one try/catch so no
-    // exception can escape as an uncaught zone error.
+    setState(() {
+      _isAnalyzing = true;
+      _extractedEvents = [];
+      _errorMessage = null;
+    });
+
     try {
-      final picked = await web_picker.pickPdfFile();
-
-      if (picked == null) return; // user cancelled
-
-      if (picked.bytes.isEmpty) {
-        throw Exception('Could not read file bytes. Please try a different file.');
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _isExtracting = true;
-        _extractedEvents = [];
-        _selectedFileName = picked.name;
-        _pdfJobError = null;
-      });
-
-      final events = await OutlineService.extractEventsFromPdfBytes(
-        picked.bytes,
+      final events = await OutlineService.extractEventsFromText(
+        text,
         AIConfig.geminiApiKey,
         _selectedModule!.moduleCode,
       );
@@ -90,47 +69,36 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       if (!mounted) return;
       setState(() {
         _extractedEvents = events;
-        _isExtracting = false;
-        _pdfJobError = null;
+        _isAnalyzing = false;
       });
 
       if (events.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No dates found in this document. Try a different PDF.'),
-          ),
-        );
+        _snack('No dates found. Try adding more text from your syllabus.');
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isExtracting = false;
-        _pdfJobError = e.toString();
+        _isAnalyzing = false;
+        _errorMessage = e.toString();
       });
-      final msg = e.toString();
-      if (msg.toLowerCase().contains('cancel')) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Scan failed: $msg'),
-          duration: const Duration(seconds: 8),
-          action: SnackBarAction(label: 'Dismiss', onPressed: () {}),
-        ),
-      );
     }
   }
 
-  Future<void> _startExtraction() async => _pickFile();
-
   Future<void> _saveEvents() async {
     if (_extractedEvents.isEmpty) return;
-
     await _storageService.saveOutlineEvents(_extractedEvents);
-
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Successfully saved ${_extractedEvents.length} events to your schedule!')),
-    );
+    _snack('Saved ${_extractedEvents.length} events to your schedule!');
     Navigator.pop(context);
+  }
+
+  void _snack(String message, {int seconds = 3}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: Duration(seconds: seconds),
+      ),
+    );
   }
 
   @override
@@ -154,25 +122,13 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildUploadForm(),
-                      if (_pdfJobError != null) ...[
-                        const SizedBox(height: 12),
-                        GlassCard(
-                          padding: const EdgeInsets.all(12),
-                          child: Text(
-                            'Upload error: $_pdfJobError',
-                            style: const TextStyle(
-                              color: Colors.redAccent,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (_isExtracting) _buildLoadingState(),
+                      _buildInputForm(),
+                      if (_isAnalyzing) _buildLoading(),
+                      if (_errorMessage != null) _buildError(),
                       if (_extractedEvents.isNotEmpty) ...[
                         const SizedBox(height: 24),
                         const Text(
-                          'Review Extracted Dates',
+                          'Extracted Dates',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -180,7 +136,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        ..._extractedEvents.map((e) => _buildEventCard(e)).toList(),
+                        ..._extractedEvents.map(_buildEventCard),
                         const SizedBox(height: 24),
                         GlassButton(
                           onPressed: _saveEvents,
@@ -226,23 +182,36 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     );
   }
 
-  Widget _buildUploadForm() {
+  Widget _buildInputForm() {
     return GlassCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Extract dates from your syllabus PDF',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+          // How-to banner
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.lightbulb_outline, color: Colors.amber, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Open your syllabus PDF → Select All (Ctrl+A) → Copy (Ctrl+C) → Paste below',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
-          
-          // Module Selection
+
+          // Module dropdown
           DropdownButtonFormField<Module>(
             value: _selectedModule,
             dropdownColor: AppColors.surface,
@@ -260,59 +229,69 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
               prefixIcon: Icon(Icons.book, color: Colors.white70),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
-          // File Picker
-          GestureDetector(
-            onTap: _pickFile,
-            child: Container(
-              height: 120,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  style: BorderStyle.solid,
-                ),
+          // Paste area
+          TextField(
+            controller: _textController,
+            maxLines: 10,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Paste your syllabus / module outline text here...',
+              hintStyle: const TextStyle(color: Colors.white38),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.05),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    _selectedFileName == null ? Icons.upload_file : Icons.check_circle,
-                    size: 40,
-                    color: _selectedFileName == null ? Colors.white54 : Colors.greenAccent,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _selectedFileName == null 
-                        ? 'Select PDF file' 
-                        : _selectedFileName!,
-                    style: const TextStyle(color: Colors.white70),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
               ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.5)),
+              ),
+              contentPadding: const EdgeInsets.all(12),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Note: For older Word files (.doc), please "Save As PDF" before uploading.',
-            style: TextStyle(color: Colors.white54, fontSize: 12, fontStyle: FontStyle.italic),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                '${_textController.text.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length} words',
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
+          // Analyze button
           GlassButton(
-            onPressed: _isExtracting ? null : _startExtraction,
+            onPressed: _isAnalyzing ? null : _analyze,
             child: Center(
-              child: _isExtracting 
+              child: _isAnalyzing
                   ? const SizedBox(
-                      height: 20, 
-                      width: 20, 
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
-                  : const Text('Start AI Scan', style: TextStyle(fontWeight: FontWeight.bold)),
+                  : const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.auto_awesome, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          'Extract Dates with AI',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ],
@@ -320,22 +299,43 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     );
   }
 
-  Widget _buildLoadingState() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 40),
+  Widget _buildLoading() {
+    return const Padding(
+      padding: EdgeInsets.only(top: 32),
       child: Center(
         child: Column(
           children: [
-            const CircularProgressIndicator(color: AppColors.primary),
-            const SizedBox(height: 16),
-            const Text(
-              'AI is analyzing your document...',
+            CircularProgressIndicator(color: AppColors.primary),
+            SizedBox(height: 16),
+            Text(
+              'AI is reading your syllabus...',
               style: TextStyle(color: Colors.white70),
             ),
-            const SizedBox(height: 4),
-            const Text(
-              'This usually takes about 5-10 seconds',
+            SizedBox(height: 4),
+            Text(
+              'This usually takes 5–10 seconds',
               style: TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: GlassCard(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _errorMessage ?? '',
+                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
             ),
           ],
         ),
@@ -345,7 +345,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
 
   Widget _buildEventCard(OutlineEvent event) {
     final dateStr = DateFormat('EEEE, MMMM d, y').format(event.date);
-    
+
     return GlassCard(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -354,14 +354,11 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: _getTypeColor(event.type).withOpacity(0.1),
+              color: _typeColor(event.type).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _getTypeColor(event.type).withOpacity(0.3)),
+              border: Border.all(color: _typeColor(event.type).withValues(alpha: 0.4)),
             ),
-            child: Icon(
-              _getTypeIcon(event.type),
-              color: _getTypeColor(event.type),
-            ),
+            child: Icon(_typeIcon(event.type), color: _typeColor(event.type)),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -373,7 +370,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
-                    fontSize: 15,
+                    fontSize: 14,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -381,10 +378,10 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                   dateStr,
                   style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
-                if (event.venue != null || event.time != null)
+                if (event.time != null || event.venue != null)
                   Text(
-                    '${event.time ?? ''} ${event.venue != null ? 'at ${event.venue}' : ''}',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    [if (event.time != null) event.time!, if (event.venue != null) event.venue!].join(' · '),
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
                   ),
               ],
             ),
@@ -392,7 +389,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: _typeColor(event.type).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -400,7 +397,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
-                color: _getTypeColor(event.type),
+                color: _typeColor(event.type),
               ),
             ),
           ),
@@ -409,23 +406,21 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     );
   }
 
-  Color _getTypeColor(String type) {
+  Color _typeColor(String type) {
     switch (type.toLowerCase()) {
       case 'test': return Colors.orangeAccent;
-      case 'assignment': return Colors.blueAccent;
       case 'exam': return Colors.redAccent;
       case 'practical': return Colors.tealAccent;
-      default: return Colors.white70;
+      default: return Colors.blueAccent;
     }
   }
 
-  IconData _getTypeIcon(String type) {
+  IconData _typeIcon(String type) {
     switch (type.toLowerCase()) {
       case 'test': return Icons.quiz;
-      case 'assignment': return Icons.assignment;
       case 'exam': return Icons.workspace_premium;
       case 'practical': return Icons.science;
-      default: return Icons.event;
+      default: return Icons.assignment;
     }
   }
 }

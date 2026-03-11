@@ -28,6 +28,43 @@ Example: [{"title": "Test 1", "date": "2026-03-20", "type": "Test", "time": "14:
 If no events are found, return an empty list: []
 """;
 
+  /// Analyses pasted syllabus text with Gemini — no file upload, no JS interop.
+  static Future<List<OutlineEvent>> extractEventsFromText(
+    String text,
+    String apiKey,
+    String moduleCode,
+  ) async {
+    if (apiKey.isEmpty) {
+      throw Exception('Gemini API key is not configured. Please contact the administrator.');
+    }
+    if (text.trim().isEmpty) {
+      throw Exception('No text provided. Please paste your syllabus content.');
+    }
+
+    try {
+      final model = GenerativeModel(model: _modelName, apiKey: apiKey);
+
+      final parts = [
+        TextPart(
+          '$_prompt\n\nModule code: $moduleCode\n\nSyllabus Text:\n---\n'
+          '${text.substring(0, text.length.clamp(0, 60000))}\n---',
+        ),
+      ];
+
+      final response = await model.generateContent([Content.multi(parts)]);
+
+      final responseText = response.text;
+      if (responseText == null || responseText.isEmpty) {
+        throw Exception('AI returned an empty response. The text may not contain any identifiable dates.');
+      }
+
+      return _parseGeminiResponse(responseText, moduleCode);
+    } catch (e, stackTrace) {
+      debugPrint('Error in OutlineService.extractEventsFromText: $e\n$stackTrace');
+      rethrow;
+    }
+  }
+
   /// Sends PDF bytes directly to Gemini for analysis — no JS interop, no text extraction.
   static Future<List<OutlineEvent>> extractEventsFromPdfBytes(
     Uint8List pdfBytes,
@@ -73,23 +110,41 @@ If no events are found, return an empty list: []
         jsonString = jsonString.substring(start, end + 1);
       }
 
-      final List<dynamic> decoded = jsonDecode(jsonString);
-
-      return decoded
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item as Map))
-          .where((map) => _isValidDate(map['date']?.toString()))
-          .map((map) {
-            map['moduleCode'] = moduleCode;
-            // Normalise type so OutlineEvent.fromJson never gets an unknown value
-            map['type'] = _normaliseType(map['type']?.toString());
-            return OutlineEvent.fromJson(map);
-          })
-          .toList();
+      return _parseGeminiResponse(responseText, moduleCode);
     } catch (e, stackTrace) {
       debugPrint('Error in OutlineService.extractEventsFromPdfBytes: $e\n$stackTrace');
       rethrow;
     }
+  }
+
+  static List<OutlineEvent> _parseGeminiResponse(String responseText, String moduleCode) {
+    String jsonString = responseText.trim();
+    if (jsonString.startsWith('```')) {
+      jsonString = jsonString.replaceAll(
+        RegExp(r'^```json\n?|^```\n?|```$', multiLine: true),
+        '',
+      );
+    }
+    jsonString = jsonString.trim();
+
+    final start = jsonString.indexOf('[');
+    final end = jsonString.lastIndexOf(']');
+    if (start != -1 && end != -1 && end > start) {
+      jsonString = jsonString.substring(start, end + 1);
+    }
+
+    final List<dynamic> decoded = jsonDecode(jsonString);
+
+    return decoded
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .where((map) => _isValidDate(map['date']?.toString()))
+        .map((map) {
+          map['moduleCode'] = moduleCode;
+          map['type'] = _normaliseType(map['type']?.toString());
+          return OutlineEvent.fromJson(map);
+        })
+        .toList();
   }
 
   static bool _isValidDate(String? value) {
