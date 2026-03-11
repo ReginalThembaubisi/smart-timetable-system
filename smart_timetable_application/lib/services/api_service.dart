@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/student.dart';
 import '../config/app_config.dart';
@@ -506,11 +507,62 @@ class ApiService {
     }
   }
 
+  // Register device token for FCM push notifications
+  static Future<Map<String, dynamic>> registerDeviceToken({
+    required int studentId,
+    required String deviceToken,
+    String platform = 'unknown',
+  }) async {
+    final client = _createClient();
+    try {
+      final response = await client.post(
+        Uri.parse('$_baseUrl/api/register_device_token.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'student_id': studentId,
+          'device_token': deviceToken,
+          'platform': platform,
+        }),
+      ).timeout(
+        Duration(milliseconds: AppConfig.connectionTimeout),
+        onTimeout: () {
+          throw Exception('Register device token request timed out');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data;
+      } else {
+        return {
+          'success': false,
+          'message': 'Failed to register device token: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      debugPrint('Register device token error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    } finally {
+      client.close();
+    }
+  }
+
   // Get student ID from local storage
   static Future<String?> getStudentId() async {
     try {
-      // This would typically get from SharedPreferences or similar
-      // For now, return null - this should be implemented based on your storage strategy
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('student_data');
+      if (raw == null || raw.isEmpty) return null;
+
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        final dynamic id = decoded['student_id'] ?? decoded['studentId'];
+        if (id == null) return null;
+        return id.toString();
+      }
       return null;
     } catch (e) {
       debugPrint('Error getting student ID: $e');

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -7,14 +9,17 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'dart:convert';
 import 'dart:async';
-import '../models/student.dart';
 import '../models/study_session.dart';
 import 'api_service.dart';
 
 class NotificationService {
   static const String _notificationsKey = 'exam_notifications';
+  static const String _seenExamNotificationIdsKey = 'seen_exam_notification_ids';
+  static const String _lastRegisteredFcmTokenKey = 'last_registered_fcm_token';
   static Timer? _notificationTimer;
   static FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;
+  static FirebaseMessaging? _firebaseMessaging;
+  static bool _firebaseReady = false;
   
   // Initialize notification service
   static Future<void> initialize() async {
@@ -67,8 +72,11 @@ class NotificationService {
     
     // Request permissions (especially for iOS)
     await _requestPermissions();
+    await _initializeFirebasePush();
     
     _startNotificationTimer();
+    // Run once immediately so students get alerts without waiting 5 minutes.
+    await _checkForNotifications();
   }
   
   // Handle notification tap
@@ -123,14 +131,163 @@ class NotificationService {
   // Check for new notifications
   static Future<void> _checkForNotifications() async {
     try {
-      final studentId = await ApiService.getStudentId();
+      final studentIdStr = await ApiService.getStudentId();
+      if (studentIdStr == null) return;
+      final studentId = int.tryParse(studentIdStr);
       if (studentId == null) return;
-      
-      // This would typically check for push notifications
-      // For now, we'll just check when the app is opened
+      await _syncDeviceToken(studentId);
+
+      final response = await ApiService.getStudentExamNotifications(studentId);
+      if (response['success'] != true) return;
+
+      final payload = response['data'];
+      if (payload is! Map<String, dynamic>) return;
+      final rawNotifications = payload['notifications'];
+      if (rawNotifications is! List) return;
+
+      final notifications = rawNotifications
+          .whereType<Map<String, dynamic>>()
+          .map((n) => ExamNotification.fromJson(n))
+          .toList();
+
+      final prefs = await SharedPreferences.getInstance();
+      final seenIds = prefs.getStringList(_seenExamNotificationIdsKey)?.toSet() ?? <String>{};
+
+      for (final notification in notifications) {
+        if (notification.isRead) {
+          continue;
+        }
+        if (!seenIds.contains(notification.notificationId)) {
+          await _showExamLocalNotification(notification);
+          seenIds.add(notification.notificationId);
+        }
+      }
+
+      await prefs.setStringList(_seenExamNotificationIdsKey, seenIds.toList());
+      await storeNotifications(notifications);
     } catch (e) {
       print('Error checking notifications: $e');
     }
+  }
+
+  // Call after successful login to bind this device to the student account immediately.
+  static Future<void> onStudentAuthenticated(int studentId) async {
+    try {
+      await _syncDeviceToken(studentId);
+      await _checkForNotifications();
+    } catch (e) {
+      print('Error after student authentication notification sync: $e');
+    }
+  }
+
+  static Future<void> _initializeFirebasePush() async {
+    if (kIsWeb) return;
+    try {
+      await Firebase.initializeApp();
+      _firebaseMessaging = FirebaseMessaging.instance;
+      await _firebaseMessaging!.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      _firebaseReady = true;
+
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+        final title = message.notification?.title ?? 'Exam timetable update';
+        final body = message.notification?.body ?? 'New exam information is available.';
+        await _showSimpleLocalNotification(title, body, 'push_foreground');
+      });
+
+      _firebaseMessaging!.onTokenRefresh.listen((token) async {
+        final studentIdStr = await ApiService.getStudentId();
+        final studentId = int.tryParse(studentIdStr ?? '');
+        if (studentId != null) {
+          await _registerTokenWithServer(studentId, token);
+        }
+      });
+    } catch (e) {
+      _firebaseReady = false;
+      print('Firebase push init skipped: $e');
+    }
+  }
+
+  static Future<void> _syncDeviceToken(int studentId) async {
+    if (!_firebaseReady || _firebaseMessaging == null) return;
+    try {
+      final token = await _firebaseMessaging!.getToken();
+      if (token == null || token.isEmpty) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      final lastToken = prefs.getString(_lastRegisteredFcmTokenKey);
+      if (lastToken == token) return;
+
+      final ok = await _registerTokenWithServer(studentId, token);
+      if (ok) {
+        await prefs.setString(_lastRegisteredFcmTokenKey, token);
+      }
+    } catch (e) {
+      print('Failed to sync FCM token: $e');
+    }
+  }
+
+  static Future<bool> _registerTokenWithServer(int studentId, String token) async {
+    final platform = defaultTargetPlatform.name;
+    final result = await ApiService.registerDeviceToken(
+      studentId: studentId,
+      deviceToken: token,
+      platform: platform,
+    );
+    return result['success'] == true;
+  }
+
+  static Future<void> _showSimpleLocalNotification(String title, String body, String payload) async {
+    if (_flutterLocalNotificationsPlugin == null || kIsWeb) return;
+
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'exam_updates',
+      'Exam Updates',
+      channelDescription: 'Alerts when admins upload or update exam timetables',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      playSound: true,
+    );
+
+    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const NotificationDetails platformDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _flutterLocalNotificationsPlugin!.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title,
+      body,
+      platformDetails,
+      payload: payload,
+    );
+  }
+
+  static Future<void> _showExamLocalNotification(ExamNotification notification) async {
+    if (_flutterLocalNotificationsPlugin == null || kIsWeb) return;
+
+    final id = int.tryParse(notification.notificationId) ??
+        DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final title = notification.title.isNotEmpty ? notification.title : 'Exam timetable update';
+    final body = notification.message.isNotEmpty
+        ? notification.message
+        : 'A new exam entry has been added to your timetable.';
+
+    await _showSimpleLocalNotification(
+      title,
+      body,
+      'exam_notification_${notification.notificationId}_$id',
+    );
   }
   
   // Get stored notifications

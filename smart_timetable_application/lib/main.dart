@@ -155,6 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
             await localStorage.initialize();
             await localStorage.saveStudent(student);
             debugPrint('Login data saved locally');
+            await NotificationService.onStudentAuthenticated(student.studentId);
           } catch (e) {
             debugPrint('Warning: Could not save login data locally: $e');
           }

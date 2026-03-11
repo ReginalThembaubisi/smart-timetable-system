@@ -36,6 +36,96 @@ function columnExists($pdo, $table, $column) {
 	}
 }
 
+function getEnvValue($key, $default = '') {
+	$val = getenv($key);
+	if ($val !== false && $val !== '') return $val;
+	if (isset($_ENV[$key]) && $_ENV[$key] !== '') return $_ENV[$key];
+	if (isset($_SERVER[$key]) && $_SERVER[$key] !== '') return $_SERVER[$key];
+	return $default;
+}
+
+function sendFcmToTokens($tokens, $title, $body, $data = []) {
+	$serverKey = getEnvValue('FCM_SERVER_KEY', '');
+	if ($serverKey === '' || empty($tokens) || !function_exists('curl_init')) {
+		return false;
+	}
+
+	$success = false;
+	foreach ($tokens as $token) {
+		$payload = [
+			'to' => $token,
+			'notification' => [
+				'title' => $title,
+				'body' => $body,
+				'sound' => 'default'
+			],
+			'data' => $data,
+			'priority' => 'high'
+		];
+
+		$ch = curl_init('https://fcm.googleapis.com/fcm/send');
+		if ($ch === false) {
+			continue;
+		}
+		curl_setopt($ch, CURLOPT_POST, true);
+		curl_setopt($ch, CURLOPT_HTTPHEADER, [
+			'Authorization: key=' . $serverKey,
+			'Content-Type: application/json'
+		]);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+		$response = curl_exec($ch);
+		$httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		curl_close($ch);
+
+		if ($httpCode >= 200 && $httpCode < 300 && $response) {
+			$decoded = json_decode($response, true);
+			if (!empty($decoded['success'])) {
+				$success = true;
+			}
+		}
+	}
+
+	return $success;
+}
+
+function pushExamNotificationToStudent($pdo, $studentId, $title, $message, $examId) {
+	try {
+		$pdo->exec("CREATE TABLE IF NOT EXISTS student_device_tokens (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			student_id INT NOT NULL,
+			device_token VARCHAR(512) NOT NULL,
+			platform VARCHAR(32) NULL,
+			is_active TINYINT(1) NOT NULL DEFAULT 1,
+			last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE KEY uniq_student_token (student_id, device_token),
+			INDEX idx_student_active (student_id, is_active)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+		$stmt = $pdo->prepare("SELECT device_token FROM student_device_tokens WHERE student_id = ? AND is_active = 1");
+		$stmt->execute([(int)$studentId]);
+		$tokens = array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'device_token');
+		if (empty($tokens)) {
+			return false;
+		}
+
+		return sendFcmToTokens(
+			$tokens,
+			$title ?: 'Exam Timetable Updated',
+			$message ?: 'A new exam update has been added.',
+			[
+				'type' => 'exam_update',
+				'exam_id' => (string)$examId
+			]
+		);
+	} catch (Throwable $t) {
+		error_log('Push send failed for student ' . $studentId . ': ' . $t->getMessage());
+		return false;
+	}
+}
+
 function computeDurationMinutes($start, $end) {
 	$startDt = DateTime::createFromFormat('H:i', $start);
 	$endDt = DateTime::createFromFormat('H:i', $end);
@@ -655,9 +745,16 @@ function saveExamRows($rows, $pdo, $status = 'final') {
 				FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
 				FOREIGN KEY (exam_id) REFERENCES exams(exam_id) ON DELETE CASCADE
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+			$hasNotifTitle = columnExists($pdo, 'exam_notifications', 'title');
+			$hasStudentModuleStatus = columnExists($pdo, 'student_modules', 'status');
 			
 			// Get all students enrolled in this module
-			$stmt = $pdo->prepare("SELECT DISTINCT student_id FROM student_modules WHERE module_id = ? AND status = 'active'");
+			if ($hasStudentModuleStatus) {
+				$stmt = $pdo->prepare("SELECT DISTINCT student_id FROM student_modules WHERE module_id = ? AND status = 'active'");
+			} else {
+				$stmt = $pdo->prepare("SELECT DISTINCT student_id FROM student_modules WHERE module_id = ?");
+			}
 			$stmt->execute([$moduleId]);
 			$enrolledStudents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 			
@@ -674,10 +771,19 @@ function saveExamRows($rows, $pdo, $status = 'final') {
 			$message = "Exam scheduled for {$moduleInfo['module_code']} ({$moduleInfo['module_name']}) on {$examDateFormatted} at {$examTimeFormatted} in {$venueNameForMsg}.";
 			
 			// Create notification for each enrolled student
-			$notifStmt = $pdo->prepare("INSERT INTO exam_notifications (student_id, exam_id, title, message, is_read) VALUES (?, ?, ?, ?, 0)");
+			if ($hasNotifTitle) {
+				$notifStmt = $pdo->prepare("INSERT INTO exam_notifications (student_id, exam_id, title, message, is_read) VALUES (?, ?, ?, ?, 0)");
+			} else {
+				$notifStmt = $pdo->prepare("INSERT INTO exam_notifications (student_id, exam_id, message, is_read) VALUES (?, ?, ?, 0)");
+			}
 			foreach ($enrolledStudents as $student) {
 				try {
-					$notifStmt->execute([$student['student_id'], $examId, $title, $message]);
+					if ($hasNotifTitle) {
+						$notifStmt->execute([$student['student_id'], $examId, $title, $message]);
+					} else {
+						$notifStmt->execute([$student['student_id'], $examId, $message]);
+					}
+					pushExamNotificationToStudent($pdo, (int)$student['student_id'], $title, $message, $examId);
 				} catch (Exception $e) {
 					// Skip if notification creation fails (might be duplicate or constraint issue)
 					error_log("Failed to create notification for student {$student['student_id']}, exam {$examId}: " . $e->getMessage());
