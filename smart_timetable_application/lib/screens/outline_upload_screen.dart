@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:file_picker/file_picker.dart';
-import '../services/outline_service.dart';
 import '../models/outline_event.dart';
 import '../models/module.dart';
 import '../widgets/glass_card.dart';
@@ -66,6 +64,17 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       );
       return;
     }
+    if (AIConfig.geminiApiKey.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Gemini API key is missing. Add GEMINI_API_KEY in .env or --dart-define.',
+          ),
+          duration: Duration(seconds: 6),
+        ),
+      );
+      return;
+    }
 
     setState(() {
       _isExtracting = true;
@@ -90,9 +99,14 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
           .replaceAll(RegExp(r'```json\n?|^```\n?|```$', multiLine: true), '')
           .trim();
 
-      final List<dynamic> decoded = jsonDecode(cleaned);
+      final List<dynamic> decoded = _decodeEventsJson(cleaned);
       final events = decoded
-          .map((e) => OutlineEvent.fromJson(e as Map<String, dynamic>))
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .map((e) {
+            e['moduleCode'] = _selectedModule!.moduleCode;
+            return OutlineEvent.fromJson(e);
+          })
           .toList();
 
       setState(() {
@@ -127,9 +141,20 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     }
   }
 
-  Future<void> _startExtraction() async {
-    // Everything now happens inside _pickFile().
-    // This method is intentionally empty to preserve button logic if needed.
+  Future<void> _startExtraction() async => _pickFile();
+
+  List<dynamic> _decodeEventsJson(String rawJson) {
+    try {
+      return jsonDecode(rawJson) as List<dynamic>;
+    } catch (_) {
+      final start = rawJson.indexOf('[');
+      final end = rawJson.lastIndexOf(']');
+      if (start == -1 || end == -1 || end <= start) {
+        throw const FormatException('Could not find a valid JSON array in AI response.');
+      }
+      final sliced = rawJson.substring(start, end + 1);
+      return jsonDecode(sliced) as List<dynamic>;
+    }
   }
 
   Future<void> _saveEvents() async {
