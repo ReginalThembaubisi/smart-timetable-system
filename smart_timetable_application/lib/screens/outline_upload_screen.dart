@@ -62,34 +62,31 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       return;
     }
 
-    // Pick file first — before setState so the user gesture is still active
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-      withData: true,
-    );
-
-    if (picked == null || picked.files.isEmpty) return;
-
-    final file = picked.files.first;
-    final bytes = file.bytes;
-    if (bytes == null || bytes.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not read file bytes. Please try again.')),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _isExtracting = true;
-      _extractedEvents = [];
-      _selectedFileName = file.name;
-      _pdfJobError = null;
-    });
-
+    // Wrap everything — including the file picker — in one try/catch so no
+    // exception can escape as an uncaught zone error.
     try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: true,
+      );
+
+      if (picked == null || picked.files.isEmpty) return;
+
+      final file = picked.files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        throw Exception('Could not read file bytes. Please try a different file.');
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _isExtracting = true;
+        _extractedEvents = [];
+        _selectedFileName = file.name;
+        _pdfJobError = null;
+      });
+
       final events = await OutlineService.extractEventsFromPdfBytes(
         bytes,
         AIConfig.geminiApiKey,
@@ -116,9 +113,11 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
         _isExtracting = false;
         _pdfJobError = e.toString();
       });
+      final msg = e.toString();
+      if (msg.toLowerCase().contains('cancel')) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Scan failed: $e'),
+          content: Text('Scan failed: $msg'),
           duration: const Duration(seconds: 8),
           action: SnackBarAction(label: 'Dismiss', onPressed: () {}),
         ),

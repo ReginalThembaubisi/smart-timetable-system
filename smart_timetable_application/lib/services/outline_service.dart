@@ -77,9 +77,12 @@ If no events are found, return an empty list: []
 
       return decoded
           .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .where((map) => _isValidDate(map['date']?.toString()))
           .map((map) {
             map['moduleCode'] = moduleCode;
+            // Normalise type so OutlineEvent.fromJson never gets an unknown value
+            map['type'] = _normaliseType(map['type']?.toString());
             return OutlineEvent.fromJson(map);
           })
           .toList();
@@ -87,5 +90,23 @@ If no events are found, return an empty list: []
       debugPrint('Error in OutlineService.extractEventsFromPdfBytes: $e\n$stackTrace');
       rethrow;
     }
+  }
+
+  static bool _isValidDate(String? value) {
+    if (value == null || value.trim().isEmpty) return false;
+    try {
+      DateTime.parse(value.trim());
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static String _normaliseType(String? raw) {
+    final v = (raw ?? '').toLowerCase();
+    if (v.contains('test')) return 'Test';
+    if (v.contains('exam')) return 'Exam';
+    if (v.contains('practical') || v.contains('lab')) return 'Practical';
+    return 'Assignment';
   }
 }
