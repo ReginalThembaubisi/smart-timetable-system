@@ -14,7 +14,27 @@ if (file_exists($vendorAutoload)) {
 	require_once $vendorAutoload;
 }
 
-$pdo = Database::getInstance()->getConnection();
+try {
+	$pdo = Database::getInstance()->getConnection();
+} catch (Throwable $t) {
+	error_log('Exam import DB connection failed: ' . $t->getMessage());
+	$_SESSION['error_message'] = 'Database connection failed while importing exams.';
+	header('Location: admin/exams.php');
+	exit;
+}
+
+function columnExists($pdo, $table, $column) {
+	// Protect dynamic identifiers before embedding in SQL
+	if (!preg_match('/^[A-Za-z0-9_]+$/', $table) || !preg_match('/^[A-Za-z0-9_]+$/', $column)) {
+		return false;
+	}
+	try {
+		$stmt = $pdo->query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'");
+		return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+	} catch (Throwable $t) {
+		return false;
+	}
+}
 
 function computeDurationMinutes($start, $end) {
 	$startDt = DateTime::createFromFormat('H:i', $start);
@@ -99,6 +119,8 @@ function parseFinalExamFormat($content) {
 	
 	foreach ($lines as $lineNum => $line) {
 		$originalLine = $line;
+		$line = normalizeDashes($line);
+		$line = normalizeTimeFragments($line);
 		$line = trim($line);
 		
 		// Skip header lines
@@ -140,9 +162,12 @@ function parseFinalExamFormat($content) {
 			continue;
 		}
 		
-		// Look for the pattern: YYYY/MM/DD followed immediately by module code
-		// Example: 2025/11/03ACC321_P_1_1AUDITING 321
-		if (preg_match('/^(\d{4}\/\d{2}\/\d{2})([A-Z0-9]+_P_\d+_\d+)([A-Z][A-Z0-9\s]*)/', $line, $m)) {
+		// Look for a row start pattern:
+		// YYYY/MM/DD + exam unique code (+ optional spaces) + exam name text
+		// Examples:
+		// 2025/11/03ACC321_P_1_1AUDITING 321
+		// 2025/11/03 ACC321_P_1_1 AUDITING 321
+		if (preg_match('/^(\d{4}\/\d{2}\/\d{2})\s*([A-Z0-9]+(?:_[A-Z0-9]+){2,})(?:\s+|)(.*)$/', $line, $m)) {
 			// Finalize previous entry if exists
 			if ($currentEntry && $currentEntry['module_code'] && $currentEntry['exam_date'] && $currentEntry['exam_time']) {
 				// If duration is missing, default to 180 minutes (common exam duration)
@@ -162,10 +187,13 @@ function parseFinalExamFormat($content) {
 			}
 			
 			$dateStr = $m[1];
-			$moduleCodeFull = $m[2]; // e.g., ACC321_P_1_1
+			$moduleCodeFull = strtoupper(trim($m[2])); // e.g., ACC321_P_1_1
 			
-			// Extract module code (before _P_)
+			// Extract module code (before _P_ where present), fallback to leading code token
 			$moduleCode = preg_replace('/_P_\d+_\d+$/', '', $moduleCodeFull);
+			if ($moduleCode === $moduleCodeFull && preg_match('/^([A-Z]{2,}\d{2,})/', $moduleCodeFull, $mCode)) {
+				$moduleCode = $mCode[1];
+			}
 			
 			// Convert date from YYYY/MM/DD to YYYY-MM-DD
 			$examDate = str_replace('/', '-', $dateStr);
@@ -181,6 +209,21 @@ function parseFinalExamFormat($content) {
 				'raw' => $originalLine
 			];
 			$entryLines = [$originalLine];
+
+			// Some PDF extracts keep each row on one line; capture inline fields immediately.
+			if (preg_match('/\b(\d{1,2}):(\d{2})\s+(\d{2,3})\b/', $line, $mInlineTime)) {
+				$currentEntry['exam_time'] = sprintf('%02d:%02d:00', (int)$mInlineTime[1], (int)$mInlineTime[2]);
+				$inlineDuration = (int)$mInlineTime[3];
+				if ($inlineDuration >= 30 && $inlineDuration <= 300) {
+					$currentEntry['duration'] = $inlineDuration;
+				}
+			}
+			if (preg_match('/\b\d+_[-\d]+_[A-Z0-9]+\s+(.+?)(?:\s+[A-Za-z].*?Campus\b|\s+\d{1,4}\b|$)/i', $line, $mInlineVenue)) {
+				$inlineVenue = trim($mInlineVenue[1]);
+				if ($inlineVenue !== '' && stripos($inlineVenue, 'CAMPUS') === false) {
+					$currentEntry['venue'] = $inlineVenue;
+				}
+			}
 			continue;
 		}
 		
@@ -515,6 +558,9 @@ function saveExamRows($rows, $pdo, $status = 'final') {
 	$modulesCache = [];
 	$venuesCache = [];
 	$skipReasons = []; // Track why entries are skipped
+	$hasModulesCredits = columnExists($pdo, 'modules', 'credits');
+	$hasVenuesCapacity = columnExists($pdo, 'venues', 'capacity');
+	$hasExamStatus = columnExists($pdo, 'exams', 'exam_status');
 
 	foreach ($rows as $row) {
 		$moduleCode = trim($row['module_code']);
@@ -534,8 +580,13 @@ function saveExamRows($rows, $pdo, $status = 'final') {
 			if ($existing) {
 				$modulesCache[$moduleCode] = (int)$existing['module_id'];
 			} else {
-				$stmt = $pdo->prepare("INSERT INTO modules (module_code, module_name, credits) VALUES (?, ?, 0)");
-				$stmt->execute([$moduleCode, $moduleCode]);
+				if ($hasModulesCredits) {
+					$stmt = $pdo->prepare("INSERT INTO modules (module_code, module_name, credits) VALUES (?, ?, 0)");
+					$stmt->execute([$moduleCode, $moduleCode]);
+				} else {
+					$stmt = $pdo->prepare("INSERT INTO modules (module_code, module_name) VALUES (?, ?)");
+					$stmt->execute([$moduleCode, $moduleCode]);
+				}
 				$modulesCache[$moduleCode] = (int)$pdo->lastInsertId();
 			}
 		}
@@ -551,8 +602,13 @@ function saveExamRows($rows, $pdo, $status = 'final') {
 				if ($existing) {
 					$venuesCache[$venueName] = (int)$existing['venue_id'];
 				} else {
-					$stmt = $pdo->prepare("INSERT INTO venues (venue_name, capacity) VALUES (?, 0)");
-					$stmt->execute([$venueName]);
+					if ($hasVenuesCapacity) {
+						$stmt = $pdo->prepare("INSERT INTO venues (venue_name, capacity) VALUES (?, 0)");
+						$stmt->execute([$venueName]);
+					} else {
+						$stmt = $pdo->prepare("INSERT INTO venues (venue_name) VALUES (?)");
+						$stmt->execute([$venueName]);
+					}
 					$venuesCache[$venueName] = (int)$pdo->lastInsertId();
 				}
 			}
@@ -597,7 +653,7 @@ function saveExamRows($rows, $pdo, $status = 'final') {
 			continue; 
 		}
 
-		if ($pdo->query("SHOW COLUMNS FROM exams LIKE 'exam_status'")->fetch(PDO::FETCH_ASSOC)) {
+		if ($hasExamStatus) {
 			$ins = $pdo->prepare("INSERT INTO exams (module_id, venue_id, exam_date, exam_time, duration, exam_status) VALUES (?, ?, ?, ?, ?, ?)");
 			$ins->execute([$moduleId, $venueId, $examDate, $examTime, (int)$duration, $status ?: 'final']);
 		} else {
@@ -670,57 +726,64 @@ function saveExamRows($rows, $pdo, $status = 'final') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
-	$file = $_FILES['file'];
-	if ($file['error'] === UPLOAD_ERR_OK) {
-		$fileTmp = $file['tmp_name'];
-		$ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-		$content = '';
+	try {
+		$file = $_FILES['file'];
+		if ($file['error'] === UPLOAD_ERR_OK) {
+			$fileTmp = $file['tmp_name'];
+			$ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+			$content = '';
 
-		if ($ext === 'txt') {
-			$content = file_get_contents($fileTmp);
-		} elseif ($ext === 'pdf') {
-			if (class_exists(\Smalot\PdfParser\Parser::class)) {
-				try {
-					$parser = new \Smalot\PdfParser\Parser();
-					$pdf = $parser->parseFile($fileTmp);
-					$content = $pdf->getText();
-				} catch (Exception $e) {
-					$_SESSION['error_message'] = 'Could not parse PDF: ' . $e->getMessage();
+			if ($ext === 'txt') {
+				$content = file_get_contents($fileTmp);
+			} elseif ($ext === 'pdf') {
+				if (class_exists(\Smalot\PdfParser\Parser::class)) {
+					try {
+						$parser = new \Smalot\PdfParser\Parser();
+						$pdf = $parser->parseFile($fileTmp);
+						$content = $pdf->getText();
+					} catch (Exception $e) {
+						$_SESSION['error_message'] = 'Could not parse PDF: ' . $e->getMessage();
+						header('Location: admin/exams.php');
+						exit;
+					}
+				} else {
+					$_SESSION['error_message'] = 'PDF parser missing. Run composer install.';
 					header('Location: admin/exams.php');
 					exit;
 				}
 			} else {
-				$_SESSION['error_message'] = 'PDF parser missing. Run composer install.';
+				$_SESSION['error_message'] = 'Unsupported file type. Upload TXT or PDF.';
 				header('Location: admin/exams.php');
 				exit;
 			}
+
+			// Write raw extracted text to logs for debugging
+			try {
+				@file_put_contents(__DIR__ . '/logs/last_exam_text.txt', $content ?: '(empty)');
+			} catch (Throwable $t) {
+				// ignore
+			}
+
+			$preview = parseExamContentPreview($content);
+			if ($preview['total'] <= 0) {
+				$_SESSION['error_message'] = 'No exam entries detected in file.';
+				header('Location: admin/exams.php');
+				exit;
+			}
+
+			$status = isset($_POST['exam_status']) && in_array($_POST['exam_status'], ['draft','final']) ? $_POST['exam_status'] : 'final';
+			$res = saveExamRows($preview['rows'], $pdo, $status);
+			$_SESSION['success_message'] = "Imported {$res['created']} of {$res['total']} exams. Skipped {$res['skipped']}.";
+			header('Location: admin/exams.php');
+			exit;
 		} else {
-			$_SESSION['error_message'] = 'Unsupported file type. Upload TXT or PDF.';
+			$_SESSION['error_message'] = 'Upload error.';
 			header('Location: admin/exams.php');
 			exit;
 		}
-
-		// Write raw extracted text to logs for debugging
-		try {
-			@file_put_contents(__DIR__ . '/logs/last_exam_text.txt', $content ?: '(empty)');
-		} catch (Throwable $t) {
-			// ignore
-		}
-
-		$preview = parseExamContentPreview($content);
-		if ($preview['total'] <= 0) {
-			$_SESSION['error_message'] = 'No exam entries detected in file.';
-			header('Location: admin/exams.php');
-			exit;
-		}
-
-		$status = isset($_POST['exam_status']) && in_array($_POST['exam_status'], ['draft','final']) ? $_POST['exam_status'] : 'final';
-		$res = saveExamRows($preview['rows'], $pdo, $status);
-		$_SESSION['success_message'] = "Imported {$res['created']} of {$res['total']} exams. Skipped {$res['skipped']}.";
-		header('Location: admin/exams.php');
-		exit;
-	} else {
-		$_SESSION['error_message'] = 'Upload error.';
+	} catch (Throwable $t) {
+		error_log('Exam import failed: ' . $t->getMessage());
+		$_SESSION['error_message'] = 'Import failed due to a server/database mismatch. Please run database updates and try again.';
 		header('Location: admin/exams.php');
 		exit;
 	}
