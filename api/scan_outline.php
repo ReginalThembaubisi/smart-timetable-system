@@ -66,13 +66,17 @@ if (strlen($syllabusText) < 10) {
 // Truncate to avoid token limits (~60 000 chars ≈ 15 000 tokens)
 $syllabusText = mb_substr($syllabusText, 0, 60000);
 
-// ── Gemini API key ────────────────────────────────────────────────────────────
+// ── API key: prefer Groq (generous free tier), fall back to Gemini ────────────
+$groqKey   = getenv('GROQ_API_KEY');
 $geminiKey = getenv('GEMINI_API_KEY');
-if (empty($geminiKey)) {
-    sendJSONResponse(false, null, 'Gemini API key is not configured on the server.', 500);
+
+if (empty($groqKey) && empty($geminiKey)) {
+    sendJSONResponse(false, null, 'No AI API key configured on the server.', 500);
 }
 
-// ── Prompt ────────────────────────────────────────────────────────────────────
+$useGroq = !empty($groqKey);
+
+// ── Prompt (shared) ───────────────────────────────────────────────────────────
 $prompt = <<<PROMPT
 You are an academic assistant for a university student. Your goal is to find all important assessment dates from the syllabus/outline text below.
 
@@ -101,19 +105,36 @@ Syllabus text:
 ---
 PROMPT;
 
-// ── Call Gemini REST API ──────────────────────────────────────────────────────
-$url     = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={$geminiKey}";
-$payload = json_encode([
-    'contents'        => [['parts' => [['text' => $prompt]]]],
-    'generationConfig' => ['temperature' => 0.1, 'maxOutputTokens' => 2048],
-]);
+// ── Call AI API ───────────────────────────────────────────────────────────────
+if ($useGroq) {
+    // Groq — OpenAI-compatible, very generous free tier
+    $url     = 'https://api.groq.com/openai/v1/chat/completions';
+    $payload = json_encode([
+        'model'       => 'llama-3.3-70b-versatile',
+        'messages'    => [['role' => 'user', 'content' => $prompt]],
+        'temperature' => 0.1,
+        'max_tokens'  => 2048,
+    ]);
+    $headers = [
+        'Content-Type: application/json',
+        "Authorization: Bearer {$groqKey}",
+    ];
+} else {
+    // Gemini fallback
+    $url     = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={$geminiKey}";
+    $payload = json_encode([
+        'contents'         => [['parts' => [['text' => $prompt]]]],
+        'generationConfig' => ['temperature' => 0.1, 'maxOutputTokens' => 2048],
+    ]);
+    $headers = ['Content-Type: application/json'];
+}
 
 $ch = curl_init($url);
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST           => true,
     CURLOPT_POSTFIELDS     => $payload,
-    CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+    CURLOPT_HTTPHEADER     => $headers,
     CURLOPT_TIMEOUT        => 25,
 ]);
 
@@ -127,23 +148,20 @@ if ($curlErr) {
 }
 
 if ($httpCode === 429) {
-    $errBody  = json_decode($raw, true);
-    $retryMsg = $errBody['error']['message'] ?? '';
-    $waitSecs = 30;
-    if (preg_match('/retry in ([\d.]+)s/i', $retryMsg, $m)) {
-        $waitSecs = (int) ceil((float) $m[1]) + 2;
-    }
-    sendJSONResponse(false, null, "AI is busy — please wait {$waitSecs} seconds and try again.", 429);
+    sendJSONResponse(false, null, 'AI is busy — please wait 30 seconds and try again.', 429);
 }
 
 if ($httpCode !== 200) {
     $body = json_decode($raw, true);
-    $msg  = $body['error']['message'] ?? "Gemini API error (HTTP {$httpCode})";
+    $msg  = $body['error']['message'] ?? "AI API error (HTTP {$httpCode})";
     sendJSONResponse(false, null, $msg, 502);
 }
 
-$geminiData = json_decode($raw, true);
-$rawResult  = $geminiData['candidates'][0]['content']['parts'][0]['text'] ?? null;
+// ── Extract text from response ────────────────────────────────────────────────
+$respData  = json_decode($raw, true);
+$rawResult = $useGroq
+    ? ($respData['choices'][0]['message']['content'] ?? null)
+    : ($respData['candidates'][0]['content']['parts'][0]['text'] ?? null);
 
 if (empty($rawResult)) {
     sendJSONResponse(false, null, 'AI returned an empty response.', 502);
