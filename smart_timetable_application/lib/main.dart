@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/api_service.dart';
@@ -13,15 +11,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // #region agent log: catch ALL uncaught flutter errors at platform level
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('[DBG-36d0ab][PLATFORM-ERROR] type=${error.runtimeType} error=$error');
-    debugPrint('[DBG-36d0ab][PLATFORM-STACK] ${stack.toString().substring(0, stack.toString().length.clamp(0, 600))}');
-    return false;
-  };
-  // #endregion
-
+  
   // Load environment variables securely
   try {
     await dotenv.load(fileName: ".env");
@@ -31,16 +21,8 @@ void main() async {
   
   // Initialize notification service
   await NotificationService.initialize();
-
-  // #region agent log: zone-guarded runApp to catch any zone-level errors
-  runZonedGuarded(
-    () => runApp(const StudentTimetableApp()),
-    (error, stack) {
-      debugPrint('[DBG-36d0ab][ZONE-ERROR] type=${error.runtimeType} error=$error');
-      debugPrint('[DBG-36d0ab][ZONE-STACK] ${stack.toString().substring(0, stack.toString().length.clamp(0, 600))}');
-    },
-  );
-  // #endregion
+  
+  runApp(const StudentTimetableApp());
 }
 
 class StudentTimetableApp extends StatelessWidget {
