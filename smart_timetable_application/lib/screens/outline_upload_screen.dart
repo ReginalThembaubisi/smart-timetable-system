@@ -30,6 +30,8 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
   void initState() {
     super.initState();
     _storageService.initialize();
+    // Capture ALL controller changes including browser-level paste on web
+    _textController.addListener(() => setState(() {}));
   }
 
   @override
@@ -90,7 +92,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     }
     final text = _textController.text.trim();
     if (text.isEmpty) {
-      _snack('Please paste your syllabus text first.');
+      setState(() => _errorMessage = 'No text detected. Paste your syllabus text into the box above and try again.');
       return;
     }
     setState(() {
