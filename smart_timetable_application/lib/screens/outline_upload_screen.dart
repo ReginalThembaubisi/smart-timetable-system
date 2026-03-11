@@ -318,6 +318,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
           // Paste area
           TextField(
             controller: _textController,
+            onChanged: (_) => setState(() {}),
             maxLines: 10,
             style: const TextStyle(color: Colors.white, fontSize: 13),
             decoration: InputDecoration(
