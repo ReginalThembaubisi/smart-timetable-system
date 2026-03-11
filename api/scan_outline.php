@@ -108,52 +108,38 @@ $payload = json_encode([
     'generationConfig' => ['temperature' => 0.1, 'maxOutputTokens' => 2048],
 ]);
 
-// Retry up to 3 times if rate-limited (429)
-$raw      = '';
-$httpCode = 0;
-$curlErr  = '';
+$ch = curl_init($url);
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => $payload,
+    CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+    CURLOPT_TIMEOUT        => 25,
+]);
 
-for ($attempt = 1; $attempt <= 3; $attempt++) {
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $payload,
-        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-        CURLOPT_TIMEOUT        => 40,
-    ]);
+$raw      = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlErr  = curl_error($ch);
+curl_close($ch);
 
-    $raw      = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlErr  = curl_error($ch);
-    curl_close($ch);
+if ($curlErr) {
+    sendJSONResponse(false, null, 'Network error contacting AI: ' . $curlErr, 502);
+}
 
-    if ($curlErr) {
-        sendJSONResponse(false, null, 'Network error contacting AI: ' . $curlErr, 502);
+if ($httpCode === 429) {
+    $errBody  = json_decode($raw, true);
+    $retryMsg = $errBody['error']['message'] ?? '';
+    $waitSecs = 30;
+    if (preg_match('/retry in ([\d.]+)s/i', $retryMsg, $m)) {
+        $waitSecs = (int) ceil((float) $m[1]) + 2;
     }
+    sendJSONResponse(false, null, "AI is busy — please wait {$waitSecs} seconds and try again.", 429);
+}
 
-    if ($httpCode === 429) {
-        // Rate limited — extract retry delay from response and wait
-        $errBody   = json_decode($raw, true);
-        $retryMsg  = $errBody['error']['message'] ?? '';
-        $waitSecs  = 35; // default wait
-        if (preg_match('/retry in ([\d.]+)s/i', $retryMsg, $m)) {
-            $waitSecs = (int) ceil((float) $m[1]) + 2;
-        }
-        if ($attempt < 3) {
-            sleep(min($waitSecs, 40));
-            continue;
-        }
-        sendJSONResponse(false, null, 'AI is busy. Please try again in a moment.', 429);
-    }
-
-    if ($httpCode !== 200) {
-        $body = json_decode($raw, true);
-        $msg  = $body['error']['message'] ?? "Gemini API error (HTTP {$httpCode})";
-        sendJSONResponse(false, null, $msg, 502);
-    }
-
-    break; // success
+if ($httpCode !== 200) {
+    $body = json_decode($raw, true);
+    $msg  = $body['error']['message'] ?? "Gemini API error (HTTP {$httpCode})";
+    sendJSONResponse(false, null, $msg, 502);
 }
 
 $geminiData = json_decode($raw, true);
