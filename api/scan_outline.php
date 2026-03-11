@@ -60,7 +60,8 @@ if (empty($moduleCode)) {
     sendJSONResponse(false, null, 'module_code is required.', 400);
 }
 if (strlen($syllabusText) < 10) {
-    sendJSONResponse(false, null, 'Could not extract enough text from the document.', 400);
+    $pdfAvailable = function_exists('exec') ? shell_exec('which pdftotext 2>/dev/null') : 'exec disabled';
+    sendJSONResponse(false, null, 'Could not extract text from PDF. pdftotext: ' . trim($pdfAvailable ?: 'not found') . '. Try pasting the text instead.', 400);
 }
 
 // Truncate to avoid token limits (~60 000 chars ≈ 15 000 tokens)
@@ -164,7 +165,8 @@ $rawResult = $useGroq
     : ($respData['candidates'][0]['content']['parts'][0]['text'] ?? null);
 
 if (empty($rawResult)) {
-    sendJSONResponse(false, null, 'AI returned an empty response.', 502);
+    // Return raw API response for debugging
+    sendJSONResponse(false, null, 'AI returned empty. Raw: ' . substr($raw, 0, 500), 502);
 }
 
 // ── Parse and normalise events ────────────────────────────────────────────────
@@ -180,7 +182,8 @@ if ($start !== false && $end !== false && $end > $start) {
 
 $events = json_decode($jsonStr, true);
 if (!is_array($events)) {
-    sendJSONResponse(false, null, 'Could not parse AI response as JSON.', 502);
+    // Show exactly what the AI returned so we can debug
+    sendJSONResponse(false, null, 'AI parse failed. Response was: ' . substr($rawResult, 0, 600), 502);
 }
 
 function normaliseType(string $raw): string {
