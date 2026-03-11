@@ -31,7 +31,6 @@ If no events are found, return an empty list: []
 """;
 
   /// Sends syllabus text to the PHP backend, which calls Gemini server-side.
-  /// This avoids ALL client-side JS-interop and CORS issues.
   static Future<List<OutlineEvent>> extractEventsFromText(
     String text,
     String moduleCode,
@@ -39,31 +38,67 @@ If no events are found, return an empty list: []
     if (text.trim().isEmpty) {
       throw Exception('No text provided. Please paste your syllabus content.');
     }
+    return _postToScanEndpoint(moduleCode, text: text);
+  }
+
+  /// Uploads a PDF file to the PHP backend, which extracts text and calls Gemini.
+  static Future<List<OutlineEvent>> extractEventsFromFile(
+    List<int> fileBytes,
+    String fileName,
+    String moduleCode,
+  ) async {
+    if (fileBytes.isEmpty) {
+      throw Exception('The selected file is empty.');
+    }
 
     final url = Uri.parse('${AppConfig.apiBaseUrl}/api/scan_outline.php');
 
+    try {
+      final request = http.MultipartRequest('POST', url)
+        ..fields['module_code'] = moduleCode
+        ..files.add(http.MultipartFile.fromBytes(
+          'file',
+          fileBytes,
+          filename: fileName,
+        ));
+
+      final streamed = await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamed);
+      return _parseResponse(response.body);
+    } catch (e, stackTrace) {
+      debugPrint('Error in OutlineService.extractEventsFromFile: $e\n$stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<List<OutlineEvent>> _postToScanEndpoint(
+    String moduleCode, {
+    String text = '',
+  }) async {
+    final url = Uri.parse('${AppConfig.apiBaseUrl}/api/scan_outline.php');
     try {
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'text': text, 'module_code': moduleCode}),
       ).timeout(const Duration(seconds: 45));
-
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-
-      if (body['success'] != true) {
-        throw Exception(body['message'] ?? 'Server error during scan.');
-      }
-
-      final List<dynamic> events = (body['data']?['events'] as List?) ?? [];
-      return events
-          .whereType<Map>()
-          .map((e) => OutlineEvent.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+      return _parseResponse(response.body);
     } catch (e, stackTrace) {
-      debugPrint('Error in OutlineService.extractEventsFromText: $e\n$stackTrace');
+      debugPrint('Error in OutlineService._postToScanEndpoint: $e\n$stackTrace');
       rethrow;
     }
+  }
+
+  static List<OutlineEvent> _parseResponse(String responseBody) {
+    final body = jsonDecode(responseBody) as Map<String, dynamic>;
+    if (body['success'] != true) {
+      throw Exception(body['message'] ?? 'Server error during scan.');
+    }
+    final List<dynamic> events = (body['data']?['events'] as List?) ?? [];
+    return events
+        .whereType<Map>()
+        .map((e) => OutlineEvent.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
   }
 
   /// Sends PDF bytes directly to Gemini for analysis — no JS interop, no text extraction.

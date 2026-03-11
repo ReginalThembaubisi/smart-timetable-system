@@ -7,6 +7,7 @@ import '../widgets/glass_button.dart';
 import '../config/app_colors.dart';
 import '../services/local_storage_service.dart';
 import '../services/outline_service.dart';
+import '../services/web_file_picker.dart' if (dart.library.io) '../services/web_file_picker_stub.dart' as web_picker;
 
 class OutlineUploadScreen extends StatefulWidget {
   final List<Module> modules;
@@ -35,6 +36,51 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
   void dispose() {
     _textController.dispose();
     super.dispose();
+  }
+
+  /// Upload a PDF file directly — PHP extracts the text and calls Gemini.
+  Future<void> _uploadFile() async {
+    if (_selectedModule == null) {
+      _snack('Please select a module first.');
+      return;
+    }
+
+    try {
+      final picked = await web_picker.pickPdfFile();
+      if (picked == null) return; // cancelled
+
+      if (!mounted) return;
+      setState(() {
+        _isAnalyzing = true;
+        _extractedEvents = [];
+        _errorMessage = null;
+      });
+
+      final events = await OutlineService.extractEventsFromFile(
+        picked.bytes,
+        picked.name,
+        _selectedModule!.moduleCode,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _extractedEvents = events;
+        _isAnalyzing = false;
+      });
+
+      if (events.isEmpty) {
+        _snack('No dates found. Try pasting the text instead.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isAnalyzing = false;
+        _errorMessage = e.toString();
+      });
+      final msg = e.toString();
+      if (msg.toLowerCase().contains('cancel')) return;
+      _snack('Upload failed: $msg', seconds: 8);
+    }
   }
 
   Future<void> _analyze() async {
@@ -223,6 +269,51 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
             ),
           ),
           const SizedBox(height: 16),
+
+          // ── File upload button ────────────────────────────────────────
+          GestureDetector(
+            onTap: _isAnalyzing ? null : _uploadFile,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.5),
+                  style: BorderStyle.solid,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.upload_file,
+                      color: AppColors.primary, size: 22),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Upload PDF File',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Row(
+            children: [
+              Expanded(child: Divider(color: Colors.white24)),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10),
+                child: Text('or paste text below',
+                    style: TextStyle(color: Colors.white38, fontSize: 12)),
+              ),
+              Expanded(child: Divider(color: Colors.white24)),
+            ],
+          ),
+          const SizedBox(height: 12),
 
           // Paste area
           TextField(
