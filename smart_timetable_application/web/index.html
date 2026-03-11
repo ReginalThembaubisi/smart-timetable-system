@@ -51,22 +51,18 @@
   <!-- #region agent log: global uncaught error trap -->
   <script>
     window.addEventListener('error', function(event) {
-      console.log('[DBG-36d0ab][GLOBAL-ERROR] Uncaught error intercepted', {
-        message: event.message,
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno,
-        errorType: event.error ? event.error.constructor.name : 'unknown',
-        errorMsg: event.error ? String(event.error) : null,
-        stack: event.error && event.error.stack ? event.error.stack.substring(0, 600) : null
-      });
+      var detail = '[DBG-36d0ab][GLOBAL-ERROR]\nmessage: ' + event.message +
+        '\ntype: ' + (event.error ? event.error.constructor.name : 'unknown') +
+        '\nstack: ' + (event.error && event.error.stack ? event.error.stack.substring(0, 500) : 'none');
+      console.log(detail);
+      alert('DEBUG ERROR (copy this):\n\n' + detail);
     });
     window.addEventListener('unhandledrejection', function(event) {
-      console.log('[DBG-36d0ab][UNHANDLED-REJECTION] Unhandled promise rejection', {
-        reason: event.reason ? String(event.reason).substring(0, 300) : 'unknown',
-        reasonType: event.reason ? (event.reason.constructor ? event.reason.constructor.name : typeof event.reason) : 'unknown',
-        stack: event.reason && event.reason.stack ? event.reason.stack.substring(0, 600) : null
-      });
+      var detail = '[DBG-36d0ab][UNHANDLED-REJECTION]\nreason: ' + String(event.reason).substring(0, 300) +
+        '\ntype: ' + (event.reason && event.reason.constructor ? event.reason.constructor.name : typeof event.reason) +
+        '\nstack: ' + (event.reason && event.reason.stack ? event.reason.stack.substring(0, 500) : 'none');
+      console.log(detail);
+      alert('DEBUG REJECTION (copy this):\n\n' + detail);
     });
   </script>
   <!-- #endregion -->
