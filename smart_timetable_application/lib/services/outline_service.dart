@@ -90,7 +90,15 @@ If no events are found, return an empty list: []
   }
 
   static List<OutlineEvent> _parseResponse(String responseBody) {
-    final body = jsonDecode(responseBody) as Map<String, dynamic>;
+    if (responseBody.trim().isEmpty) {
+      throw Exception('Server returned an empty response. Please try again.');
+    }
+    Map<String, dynamic> body;
+    try {
+      body = jsonDecode(responseBody) as Map<String, dynamic>;
+    } catch (_) {
+      throw Exception('Server error. Please try again in a moment.');
+    }
     if (body['success'] != true) {
       throw Exception(body['message'] ?? 'Server error during scan.');
     }
