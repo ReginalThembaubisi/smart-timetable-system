@@ -1,17 +1,14 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/outline_event.dart';
-
-// Use conditional imports to prevent crashing on iOS/Android devices where dart:js is missing.
-import 'pdf_js_interop.dart' if (dart.library.io) 'pdf_stub_interop.dart' as pdf_js;
 
 class OutlineService {
   static const String _modelName = 'gemini-1.5-flash';
 
   static const String _prompt = """
-You are an academic assistant for a university student. Your goal is to find all important assessment dates from the attached syllabus/outline text.
+You are an academic assistant for a university student. Your goal is to find all important assessment dates from the attached syllabus/outline.
 
 Extract events such as:
 - Tests (Test 1, Semester Test, Class Test, etc.)
@@ -31,50 +28,63 @@ Example: [{"title": "Test 1", "date": "2026-03-20", "type": "Test", "time": "14:
 If no events are found, return an empty list: []
 """;
 
-  /// Extracts academic events directly from extracted PDF text using Gemini.
-  static Future<List<OutlineEvent>> extractEventsFromText(
-    String text,
-    String apiKey, 
-    String moduleCode
+  /// Sends PDF bytes directly to Gemini for analysis — no JS interop, no text extraction.
+  static Future<List<OutlineEvent>> extractEventsFromPdfBytes(
+    Uint8List pdfBytes,
+    String apiKey,
+    String moduleCode,
   ) async {
     if (apiKey.isEmpty) {
       throw Exception('Gemini API key is not configured. Please contact the administrator.');
     }
-    if (text.trim().isEmpty) {
-      throw Exception('The extracted text is empty. Ensure the syllabus PDF is readable text, not just scanned images.');
+    if (pdfBytes.isEmpty) {
+      throw Exception('The selected file is empty.');
     }
 
     try {
       final model = GenerativeModel(model: _modelName, apiKey: apiKey);
 
       final parts = [
-        TextPart('$_prompt\n\nSyllabus Text to Analyze:\n---\n${text.substring(0, text.length.clamp(0, 50000))}\n---'),
+        TextPart('$_prompt\n\nModule code: $moduleCode'),
+        DataPart('application/pdf', pdfBytes),
       ];
 
       final response = await model.generateContent([Content.multi(parts)]);
-      
+
       final responseText = response.text;
       if (responseText == null || responseText.isEmpty) {
-        throw Exception('AI returned an empty response. The text might not contain identifiable dates.');
+        throw Exception('AI returned an empty response. The document might not contain identifiable dates.');
       }
 
-      // Strip any markdown code fences
+      // Strip markdown fences and find the JSON array
       String jsonString = responseText.trim();
       if (jsonString.startsWith('```')) {
-        jsonString = jsonString.replaceAll(RegExp(r'^```json\n?|^```\n?|```$', multiLine: true), '');
+        jsonString = jsonString.replaceAll(
+          RegExp(r'^```json\n?|^```\n?|```$', multiLine: true),
+          '',
+        );
       }
       jsonString = jsonString.trim();
 
-      final List<dynamic> decoded = jsonDecode(jsonString);
-      
-      return decoded.map((item) {
-        final map = Map<String, dynamic>.from(item);
-        map['moduleCode'] = moduleCode;
-        return OutlineEvent.fromJson(map);
-      }).toList();
+      // Fallback: extract first [...] block in case of surrounding text
+      final start = jsonString.indexOf('[');
+      final end = jsonString.lastIndexOf(']');
+      if (start != -1 && end != -1 && end > start) {
+        jsonString = jsonString.substring(start, end + 1);
+      }
 
+      final List<dynamic> decoded = jsonDecode(jsonString);
+
+      return decoded
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .map((map) {
+            map['moduleCode'] = moduleCode;
+            return OutlineEvent.fromJson(map);
+          })
+          .toList();
     } catch (e, stackTrace) {
-      debugPrint('Error in OutlineService Direct Extract: $e\n$stackTrace');
+      debugPrint('Error in OutlineService.extractEventsFromPdfBytes: $e\n$stackTrace');
       rethrow;
     }
   }

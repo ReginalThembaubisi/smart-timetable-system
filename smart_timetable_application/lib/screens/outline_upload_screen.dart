@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 import '../models/outline_event.dart';
 import '../models/module.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/glass_button.dart';
 import '../config/app_colors.dart';
 import '../services/local_storage_service.dart';
+import '../services/outline_service.dart';
 import '../config/ai_config.dart';
 import 'package:intl/intl.dart';
-import 'dart:convert';
-
-import '../services/pdf_js_interop.dart' if (dart.library.io) '../services/pdf_stub_interop.dart' as pdf_js;
 
 class OutlineUploadScreen extends StatefulWidget {
   final List<Module> modules;
@@ -48,15 +46,6 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
   }
 
   Future<void> _pickFile() async {
-    if (!kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Syllabus Scanner is only available on the web app.'),
-        ),
-      );
-      return;
-    }
-
     if (_selectedModule == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a module first.')),
@@ -66,48 +55,49 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     if (AIConfig.geminiApiKey.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Gemini API key is missing. Add GEMINI_API_KEY in .env or --dart-define.',
-          ),
+          content: Text('Gemini API key is missing. Contact your administrator.'),
           duration: Duration(seconds: 6),
         ),
       );
       return;
     }
 
+    // Pick file first — before setState so the user gesture is still active
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+      withData: true,
+    );
+
+    if (picked == null || picked.files.isEmpty) return;
+
+    final file = picked.files.first;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not read file bytes. Please try again.')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
     setState(() {
       _isExtracting = true;
       _extractedEvents = [];
-      _selectedFileName = null;
+      _selectedFileName = file.name;
       _pdfJobError = null;
     });
 
     try {
-      final result = await pdf_js.pickAndExtractAndAnalyzePdf(
-        geminiApiKey: AIConfig.geminiApiKey,
-        moduleCode: _selectedModule!.moduleCode,
+      final events = await OutlineService.extractEventsFromPdfBytes(
+        bytes,
+        AIConfig.geminiApiKey,
+        _selectedModule!.moduleCode,
       );
-
-      final fileName = result['name'] as String;
-      final rawEventsJson = result['events'] as String;
-
-      // Strip markdown fences Gemini sometimes wraps around JSON
-      final cleaned = rawEventsJson
-          .replaceAll(RegExp(r'```json\n?|^```\n?|```$', multiLine: true), '')
-          .trim();
-
-      final List<dynamic> decoded = _decodeEventsJson(cleaned);
-      final events = decoded
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .map((e) => _normalizeRawEvent(e, _selectedModule!.moduleCode))
-          .whereType<Map<String, dynamic>>()
-          .map(OutlineEvent.fromJson)
-          .toList();
 
       if (!mounted) return;
       setState(() {
-        _selectedFileName = fileName;
         _extractedEvents = events;
         _isExtracting = false;
         _pdfJobError = null;
@@ -126,14 +116,10 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
         _isExtracting = false;
         _pdfJobError = e.toString();
       });
-
-      final msg = e.toString();
-      if (msg.toLowerCase().contains('cancel')) return; // user cancelled, stay silent
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed: $msg'),
-          duration: const Duration(seconds: 6),
+          content: Text('Scan failed: $e'),
+          duration: const Duration(seconds: 8),
           action: SnackBarAction(label: 'Dismiss', onPressed: () {}),
         ),
       );
@@ -141,65 +127,6 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
   }
 
   Future<void> _startExtraction() async => _pickFile();
-
-  List<dynamic> _decodeEventsJson(String rawJson) {
-    try {
-      return jsonDecode(rawJson) as List<dynamic>;
-    } catch (_) {
-      final start = rawJson.indexOf('[');
-      final end = rawJson.lastIndexOf(']');
-      if (start == -1 || end == -1 || end <= start) {
-        throw const FormatException('Could not find a valid JSON array in AI response.');
-      }
-      final sliced = rawJson.substring(start, end + 1);
-      return jsonDecode(sliced) as List<dynamic>;
-    }
-  }
-
-  Map<String, dynamic>? _normalizeRawEvent(
-    Map<String, dynamic> raw,
-    String moduleCode,
-  ) {
-    final parsedDate = _tryParseDate(raw['date']?.toString());
-    if (parsedDate == null) return null;
-
-    return {
-      'title': (raw['title'] ?? '').toString().trim().isEmpty
-          ? 'Untitled event'
-          : raw['title'].toString().trim(),
-      'date': parsedDate.toIso8601String(),
-      'type': _normalizeType(raw['type']?.toString()),
-      'moduleCode': moduleCode,
-      'venue': raw['venue']?.toString(),
-      'time': raw['time']?.toString(),
-      'isReminderSet': false,
-    };
-  }
-
-  DateTime? _tryParseDate(String? input) {
-    if (input == null || input.trim().isEmpty) return null;
-    final value = input.trim();
-
-    try {
-      return DateTime.parse(value);
-    } catch (_) {}
-
-    const formats = ['dd/MM/yyyy', 'd/M/yyyy', 'dd-MM-yyyy', 'd-M-yyyy'];
-    for (final format in formats) {
-      try {
-        return DateFormat(format).parseStrict(value);
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  String _normalizeType(String? rawType) {
-    final value = (rawType ?? '').toLowerCase().trim();
-    if (value.contains('test')) return 'Test';
-    if (value.contains('exam')) return 'Exam';
-    if (value.contains('practical') || value.contains('lab')) return 'Practical';
-    return 'Assignment';
-  }
 
   Future<void> _saveEvents() async {
     if (_extractedEvents.isEmpty) return;
