@@ -107,6 +107,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
           .map(OutlineEvent.fromJson)
           .toList();
 
+      if (!mounted) return;
       setState(() {
         _selectedFileName = fileName;
         _extractedEvents = events;
@@ -122,6 +123,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isExtracting = false;
         _pdfJobError = e.toString();
@@ -205,13 +207,12 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     if (_extractedEvents.isEmpty) return;
 
     await _storageService.saveOutlineEvents(_extractedEvents);
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Successfully saved ${_extractedEvents.length} events to your schedule!')),
-      );
-      Navigator.pop(context);
-    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Successfully saved ${_extractedEvents.length} events to your schedule!')),
+    );
+    Navigator.pop(context);
   }
 
   @override
