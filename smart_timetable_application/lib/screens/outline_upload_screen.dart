@@ -26,7 +26,6 @@ class OutlineUploadScreen extends StatefulWidget {
 
 class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
   String? _selectedFileName;
-  String? _extractedText;
   Module? _selectedModule;
   bool _isExtracting = false;
   String? _pdfJobError;
@@ -103,16 +102,16 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       final events = decoded
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
-          .map((e) {
-            e['moduleCode'] = _selectedModule!.moduleCode;
-            return OutlineEvent.fromJson(e);
-          })
+          .map((e) => _normalizeRawEvent(e, _selectedModule!.moduleCode))
+          .whereType<Map<String, dynamic>>()
+          .map(OutlineEvent.fromJson)
           .toList();
 
       setState(() {
         _selectedFileName = fileName;
         _extractedEvents = events;
         _isExtracting = false;
+        _pdfJobError = null;
       });
 
       if (events.isEmpty) {
@@ -157,6 +156,51 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     }
   }
 
+  Map<String, dynamic>? _normalizeRawEvent(
+    Map<String, dynamic> raw,
+    String moduleCode,
+  ) {
+    final parsedDate = _tryParseDate(raw['date']?.toString());
+    if (parsedDate == null) return null;
+
+    return {
+      'title': (raw['title'] ?? '').toString().trim().isEmpty
+          ? 'Untitled event'
+          : raw['title'].toString().trim(),
+      'date': parsedDate.toIso8601String(),
+      'type': _normalizeType(raw['type']?.toString()),
+      'moduleCode': moduleCode,
+      'venue': raw['venue']?.toString(),
+      'time': raw['time']?.toString(),
+      'isReminderSet': false,
+    };
+  }
+
+  DateTime? _tryParseDate(String? input) {
+    if (input == null || input.trim().isEmpty) return null;
+    final value = input.trim();
+
+    try {
+      return DateTime.parse(value);
+    } catch (_) {}
+
+    const formats = ['dd/MM/yyyy', 'd/M/yyyy', 'dd-MM-yyyy', 'd-M-yyyy'];
+    for (final format in formats) {
+      try {
+        return DateFormat(format).parseStrict(value);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  String _normalizeType(String? rawType) {
+    final value = (rawType ?? '').toLowerCase().trim();
+    if (value.contains('test')) return 'Test';
+    if (value.contains('exam')) return 'Exam';
+    if (value.contains('practical') || value.contains('lab')) return 'Practical';
+    return 'Assignment';
+  }
+
   Future<void> _saveEvents() async {
     if (_extractedEvents.isEmpty) return;
 
@@ -192,6 +236,19 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildUploadForm(),
+                      if (_pdfJobError != null) ...[
+                        const SizedBox(height: 12),
+                        GlassCard(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            'Upload error: $_pdfJobError',
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
                       if (_isExtracting) _buildLoadingState(),
                       if (_extractedEvents.isNotEmpty) ...[
                         const SizedBox(height: 24),

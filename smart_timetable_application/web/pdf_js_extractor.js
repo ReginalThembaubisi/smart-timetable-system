@@ -1,5 +1,14 @@
 window.pickAndExtractAndAnalyzePdf = async function (geminiApiKey, moduleCode) {
     return new Promise((resolve, reject) => {
+        if (!geminiApiKey || !geminiApiKey.trim()) {
+            reject('GEMINI_API_KEY is missing.');
+            return;
+        }
+        if (typeof pdfjsLib === 'undefined' || !pdfjsLib.getDocument) {
+            reject('PDF extractor failed to load (pdfjsLib missing). Please refresh and try again.');
+            return;
+        }
+
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.pdf';
@@ -88,7 +97,7 @@ ${fullText}`;
 
             } catch (err) {
                 console.error('[pdf_js_extractor] Error:', err);
-                reject(err.toString());
+                reject(err && err.message ? err.message : String(err));
             }
         };
 
