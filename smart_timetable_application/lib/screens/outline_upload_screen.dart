@@ -82,13 +82,22 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       _pdfJobError = null;
     });
 
+    // #region agent log H-E: dart entry
+    debugPrint('[DBG-36d0ab] _pickFile: entering try block, module=${_selectedModule?.moduleCode}, apiKeyLen=${AIConfig.geminiApiKey.length}');
+    // #endregion
     try {
       // This call does: pick file -> extract text -> call Gemini -> return small result
       // All inside JS. Only ~2KB result crosses the WASM bridge.
+      // #region agent log H-E: before JS interop call
+      debugPrint('[DBG-36d0ab] _pickFile: calling JS interop');
+      // #endregion
       final result = await pdf_js.pickAndExtractAndAnalyzePdf(
         geminiApiKey: AIConfig.geminiApiKey,
         moduleCode: _selectedModule!.moduleCode,
       );
+      // #region agent log H-D: after JS interop call
+      debugPrint('[DBG-36d0ab] _pickFile: JS interop returned, keys=${result.keys.toList()}');
+      // #endregion
 
       final fileName = result['name'] as String;
       final rawEventsJson = result['events'] as String;
@@ -122,7 +131,11 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      // #region agent log H-C H-D H-E: dart catch
+      debugPrint('[DBG-36d0ab] _pickFile: CAUGHT ERROR type=${e.runtimeType} msg=${e.toString().substring(0, e.toString().length.clamp(0, 300))}');
+      debugPrint('[DBG-36d0ab] _pickFile: stack top=${stack.toString().substring(0, stack.toString().length.clamp(0, 400))}');
+      // #endregion
       if (!mounted) return;
       setState(() {
         _isExtracting = false;
