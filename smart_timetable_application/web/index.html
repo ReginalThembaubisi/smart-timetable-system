@@ -48,6 +48,28 @@
   <title>Smart Timetable - AI Study Planner</title>
   <link rel="manifest" href="manifest.json">
 
+  <!-- #region agent log: global uncaught error trap -->
+  <script>
+    window.addEventListener('error', function(event) {
+      console.log('[DBG-36d0ab][GLOBAL-ERROR] Uncaught error intercepted', {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        errorType: event.error ? event.error.constructor.name : 'unknown',
+        errorMsg: event.error ? String(event.error) : null,
+        stack: event.error && event.error.stack ? event.error.stack.substring(0, 600) : null
+      });
+    });
+    window.addEventListener('unhandledrejection', function(event) {
+      console.log('[DBG-36d0ab][UNHANDLED-REJECTION] Unhandled promise rejection', {
+        reason: event.reason ? String(event.reason).substring(0, 300) : 'unknown',
+        reasonType: event.reason ? (event.reason.constructor ? event.reason.constructor.name : typeof event.reason) : 'unknown',
+        stack: event.reason && event.reason.stack ? event.reason.stack.substring(0, 600) : null
+      });
+    });
+  </script>
+  <!-- #endregion -->
   <!-- PDF.js library for safe browser-side text extraction -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script>
