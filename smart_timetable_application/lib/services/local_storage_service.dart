@@ -88,7 +88,7 @@ class LocalStorageService {
   List<OutlineEvent> getOutlineEvents() {
     if (_prefs != null) {
       final List<String>? encoded = _prefs!.getStringList(_outlineEventsKey);
-      if (encoded != null) {
+      if (encoded != null && encoded.isNotEmpty) {
         try {
           return encoded.map((e) => OutlineEvent.fromJson(jsonDecode(e))).toList();
         } catch (e) {
@@ -96,7 +96,54 @@ class LocalStorageService {
         }
       }
     }
-    return [];
+    // Return sample events when no real events have been scanned yet
+    return _sampleEvents();
+  }
+
+  /// Sample academic events shown before any outline has been scanned.
+  static List<OutlineEvent> _sampleEvents() {
+    final now = DateTime.now();
+    return [
+      OutlineEvent(
+        title: 'Assignment 1 Submission',
+        date: now.add(const Duration(days: 7)),
+        type: 'Assignment',
+        moduleCode: 'DEMO',
+        time: '23:59',
+        venue: 'Online Portal',
+      ),
+      OutlineEvent(
+        title: 'Semester Test 1',
+        date: now.add(const Duration(days: 14)),
+        type: 'Test',
+        moduleCode: 'DEMO',
+        time: '09:00',
+        venue: 'Building 5, Room 202',
+      ),
+      OutlineEvent(
+        title: 'Project Milestone Report',
+        date: now.add(const Duration(days: 21)),
+        type: 'Assignment',
+        moduleCode: 'DEMO',
+        time: '17:00',
+        venue: 'Online Portal',
+      ),
+      OutlineEvent(
+        title: 'Practical Assessment',
+        date: now.add(const Duration(days: 30)),
+        type: 'Practical',
+        moduleCode: 'DEMO',
+        time: '14:00',
+        venue: 'Computer Lab 3',
+      ),
+      OutlineEvent(
+        title: 'Final Examination',
+        date: now.add(const Duration(days: 60)),
+        type: 'Exam',
+        moduleCode: 'DEMO',
+        venue: 'Main Exam Hall',
+      ),
+    ];
   }
 
   Future<void> saveApiKey(String key) async {

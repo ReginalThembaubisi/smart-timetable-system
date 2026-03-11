@@ -7,7 +7,6 @@ import '../widgets/glass_button.dart';
 import '../config/app_colors.dart';
 import '../services/local_storage_service.dart';
 import '../services/outline_service.dart';
-import '../config/ai_config.dart';
 
 class OutlineUploadScreen extends StatefulWidget {
   final List<Module> modules;
@@ -48,11 +47,6 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       _snack('Please paste your syllabus text first.');
       return;
     }
-    if (AIConfig.geminiApiKey.trim().isEmpty) {
-      _snack('Gemini API key is missing. Contact your administrator.', seconds: 6);
-      return;
-    }
-
     setState(() {
       _isAnalyzing = true;
       _extractedEvents = [];
@@ -62,7 +56,6 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     try {
       final events = await OutlineService.extractEventsFromText(
         text,
-        AIConfig.geminiApiKey,
         _selectedModule!.moduleCode,
       );
 

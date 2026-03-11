@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/outline_event.dart';
+import '../config/app_config.dart';
 
 class OutlineService {
   static const String _modelName = 'gemini-1.5-flash';
@@ -28,37 +30,36 @@ Example: [{"title": "Test 1", "date": "2026-03-20", "type": "Test", "time": "14:
 If no events are found, return an empty list: []
 """;
 
-  /// Analyses pasted syllabus text with Gemini — no file upload, no JS interop.
+  /// Sends syllabus text to the PHP backend, which calls Gemini server-side.
+  /// This avoids ALL client-side JS-interop and CORS issues.
   static Future<List<OutlineEvent>> extractEventsFromText(
     String text,
-    String apiKey,
     String moduleCode,
   ) async {
-    if (apiKey.isEmpty) {
-      throw Exception('Gemini API key is not configured. Please contact the administrator.');
-    }
     if (text.trim().isEmpty) {
       throw Exception('No text provided. Please paste your syllabus content.');
     }
 
+    final url = Uri.parse('${AppConfig.apiBaseUrl}/api/scan_outline.php');
+
     try {
-      final model = GenerativeModel(model: _modelName, apiKey: apiKey);
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'text': text, 'module_code': moduleCode}),
+      ).timeout(const Duration(seconds: 45));
 
-      final parts = [
-        TextPart(
-          '$_prompt\n\nModule code: $moduleCode\n\nSyllabus Text:\n---\n'
-          '${text.substring(0, text.length.clamp(0, 60000))}\n---',
-        ),
-      ];
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
 
-      final response = await model.generateContent([Content.multi(parts)]);
-
-      final responseText = response.text;
-      if (responseText == null || responseText.isEmpty) {
-        throw Exception('AI returned an empty response. The text may not contain any identifiable dates.');
+      if (body['success'] != true) {
+        throw Exception(body['message'] ?? 'Server error during scan.');
       }
 
-      return _parseGeminiResponse(responseText, moduleCode);
+      final List<dynamic> events = (body['data']?['events'] as List?) ?? [];
+      return events
+          .whereType<Map>()
+          .map((e) => OutlineEvent.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
     } catch (e, stackTrace) {
       debugPrint('Error in OutlineService.extractEventsFromText: $e\n$stackTrace');
       rethrow;
