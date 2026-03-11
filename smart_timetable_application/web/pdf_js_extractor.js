@@ -15,18 +15,19 @@ window.pickAndExtractAndAnalyzePdf = async function (geminiApiKey, moduleCode) {
         input.style.display = 'none';
 
         input.onchange = async (e) => {
-            const file = e.target.files[0];
-            if (!file) {
-                reject('No file selected');
-                return;
-            }
-
-            // Clean up DOM immediately
-            if (document.body.contains(input)) {
-                document.body.removeChild(input);
-            }
-
             try {
+                const files = input.files || (e && e.target ? e.target.files : null);
+                const file = files && files.length > 0 ? files[0] : null;
+                if (!file) {
+                    reject('No file selected');
+                    return;
+                }
+
+                // Clean up DOM immediately
+                if (document.body.contains(input)) {
+                    document.body.removeChild(input);
+                }
+
                 // ── STEP 1: Read file into JS ArrayBuffer (never touches WASM heap) ──
                 const arrayBuffer = await file.arrayBuffer();
 
@@ -96,6 +97,9 @@ ${fullText}`;
                 resolve(finalPayload);
 
             } catch (err) {
+                if (document.body.contains(input)) {
+                    document.body.removeChild(input);
+                }
                 console.error('[pdf_js_extractor] Error:', err);
                 reject(err && err.message ? err.message : String(err));
             }
