@@ -102,7 +102,7 @@ Syllabus text:
 PROMPT;
 
 // ── Call Gemini REST API ──────────────────────────────────────────────────────
-$url     = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={$geminiKey}";
+$url     = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={$geminiKey}";
 $payload = json_encode([
     'contents'        => [['parts' => [['text' => $prompt]]]],
     'generationConfig' => ['temperature' => 0.1, 'maxOutputTokens' => 2048],
