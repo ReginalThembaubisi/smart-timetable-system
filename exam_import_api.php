@@ -626,32 +626,8 @@ function saveExamRows($rows, $pdo, $status = 'final') {
 			$duration = 180;
 		}
 
-		// Check for duplicates: same module, date, time, AND venue
-		// Different venues for the same exam are allowed (e.g., large class split across multiple rooms)
-		if ($venueId) {
-			$check = $pdo->prepare("SELECT e.exam_id, m.module_code, v.venue_name, e.exam_date, e.exam_time FROM exams e LEFT JOIN modules m ON e.module_id = m.module_id LEFT JOIN venues v ON e.venue_id = v.venue_id WHERE e.module_id = ? AND e.exam_date = ? AND e.exam_time = ? AND e.venue_id = ?");
-			$check->execute([$moduleId, $examDate, $examTime, $venueId]);
-		} else {
-			// If no venue specified, check for exact match without venue
-			$check = $pdo->prepare("SELECT e.exam_id, m.module_code, v.venue_name, e.exam_date, e.exam_time FROM exams e LEFT JOIN modules m ON e.module_id = m.module_id LEFT JOIN venues v ON e.venue_id = v.venue_id WHERE e.module_id = ? AND e.exam_date = ? AND e.exam_time = ? AND (e.venue_id IS NULL OR e.venue_id = 0)");
-			$check->execute([$moduleId, $examDate, $examTime]);
-		}
-		$exists = $check->fetch(PDO::FETCH_ASSOC);
-		if ($exists) { 
-			$skipped++; 
-			$skipReasons[] = [
-				'reason' => 'Duplicate exam (same module, date, time, and venue already exists)',
-				'module' => $moduleCode,
-				'date' => $examDate,
-				'time' => $examTime,
-				'venue' => $venueName ?: 'N/A',
-				'existing_exam_id' => $exists['exam_id'],
-				'existing_module' => $exists['module_code'] ?? 'N/A',
-				'existing_venue' => $exists['venue_name'] ?? 'N/A',
-				'raw' => $row['raw'] ?? 'N/A'
-			];
-			continue; 
-		}
+		// Intentionally allow duplicate rows from source timetable.
+		// Admin requested to preserve repeated entries exactly as imported.
 
 		if ($hasExamStatus) {
 			$ins = $pdo->prepare("INSERT INTO exams (module_id, venue_id, exam_date, exam_time, duration, exam_status) VALUES (?, ?, ?, ?, ?, ?)");
