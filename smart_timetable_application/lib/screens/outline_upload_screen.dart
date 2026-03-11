@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import '../models/outline_event.dart';
 import '../models/module.dart';
 import '../widgets/glass_card.dart';
@@ -9,6 +8,7 @@ import '../services/local_storage_service.dart';
 import '../services/outline_service.dart';
 import '../config/ai_config.dart';
 import 'package:intl/intl.dart';
+import '../services/web_file_picker.dart' if (dart.library.io) '../services/web_file_picker_stub.dart' as web_picker;
 
 class OutlineUploadScreen extends StatefulWidget {
   final List<Module> modules;
@@ -65,17 +65,11 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     // Wrap everything — including the file picker — in one try/catch so no
     // exception can escape as an uncaught zone error.
     try {
-      final picked = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-        withData: true,
-      );
+      final picked = await web_picker.pickPdfFile();
 
-      if (picked == null || picked.files.isEmpty) return;
+      if (picked == null) return; // user cancelled
 
-      final file = picked.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
+      if (picked.bytes.isEmpty) {
         throw Exception('Could not read file bytes. Please try a different file.');
       }
 
@@ -83,12 +77,12 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       setState(() {
         _isExtracting = true;
         _extractedEvents = [];
-        _selectedFileName = file.name;
+        _selectedFileName = picked.name;
         _pdfJobError = null;
       });
 
       final events = await OutlineService.extractEventsFromPdfBytes(
-        bytes,
+        picked.bytes,
         AIConfig.geminiApiKey,
         _selectedModule!.moduleCode,
       );
