@@ -231,21 +231,14 @@ foreach ($events as $ev) {
 }
 
 // If AI output is mostly gibberish/noise, rely on deterministic fallback extraction.
-$usableCount = 0;
-foreach ($cleaned as $item) {
-    if (!isLikelyGibberish($item['title'])) {
-        $usableCount++;
-    }
-}
-if (empty($cleaned) || $usableCount === 0) {
-    $cleaned = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
-} else {
-    $cleaned = array_values(array_filter($cleaned, static function ($item) {
-        return !isLikelyGibberish($item['title']);
+if (!empty($cleaned)) {
+    $cleaned = array_values(array_filter($cleaned, static function ($item) use ($syllabusText) {
+        return isCredibleEvent($item, $syllabusText);
     }));
-    if (empty($cleaned)) {
-        $cleaned = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
-    }
+}
+
+if (empty($cleaned)) {
+    $cleaned = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
 }
 
 sendJSONResponse(true, ['events' => $cleaned], 'Events extracted successfully');
@@ -679,5 +672,61 @@ function isLikelyGibberish(string $value): bool
     // If it has no vowels and is long, it's likely garbage tokens.
     if (strlen($s) > 12 && !preg_match('/[AEIOUaeiou]/', $s)) return true;
 
+    return false;
+}
+
+function isCredibleEvent(array $event, string $sourceText): bool
+{
+    $title = (string)($event['title'] ?? '');
+    $date = (string)($event['date'] ?? '');
+    $type = strtolower((string)($event['type'] ?? ''));
+
+    if ($title === '' || isLikelyGibberish($title)) return false;
+    if ($date === '') return false;
+
+    // Very common corruption markers from OCR/LLM noise.
+    if (preg_match('/[?]{3,}|[@]{2,}|[|]{2,}/', $title)) return false;
+
+    // Require the extracted date to have at least one textual footprint in source text.
+    if (!dateAppearsInSource($date, $sourceText)) return false;
+
+    // If title has no typical assessment keyword, still allow if type is explicit and date is present.
+    $hasKeyword = preg_match('/\b(test|exam|assignment|practical|quiz|project|submission|due)\b/i', $title) === 1;
+    $typeKnown = in_array($type, ['test', 'exam', 'assignment', 'practical'], true);
+    if (!$hasKeyword && !$typeKnown) return false;
+
+    return true;
+}
+
+function dateAppearsInSource(string $yyyyMmDd, string $sourceText): bool
+{
+    $dt = DateTime::createFromFormat('!Y-m-d', $yyyyMmDd);
+    if (!$dt instanceof DateTime) return false;
+
+    $day = (int)$dt->format('j');
+    $monthShort = $dt->format('M'); // e.g. Mar
+    $monthLong = $dt->format('F');  // e.g. March
+    $year = $dt->format('Y');
+    $monthNum = $dt->format('m');
+    $dayPadded = $dt->format('d');
+
+    $patterns = [
+        '/\b' . preg_quote($yyyyMmDd, '/') . '\b/i',
+        '/\b' . $day . '[\/\-.]' . ltrim($monthNum, '0') . '(?:[\/\-.]' . $year . ')?\b/i',
+        '/\b' . $dayPadded . '[\/\-.]' . $monthNum . '(?:[\/\-.]' . $year . ')?\b/i',
+        '/\b' . $day . '\s+' . preg_quote($monthShort, '/') . '(?:\s+' . $year . ')?\b/i',
+        '/\b' . $day . '\s+' . preg_quote($monthLong, '/') . '(?:\s+' . $year . ')?\b/i',
+        '/\b' . preg_quote($monthShort, '/') . '\s+' . $day . '(?:,?\s*' . $year . ')?\b/i',
+        '/\b' . preg_quote($monthLong, '/') . '\s+' . $day . '(?:,?\s*' . $year . ')?\b/i',
+        // Week-range table variant: "16-20 March 2026" (match start day with same month/year).
+        '/\b' . $day . '\s*[–-]\s*\d{1,2}\s+' . preg_quote($monthLong, '/') . '\s+' . $year . '\b/i',
+        '/\b' . $day . '\s*[–-]\s*\d{1,2}\s+' . preg_quote($monthShort, '/') . '\s+' . $year . '\b/i',
+    ];
+
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $sourceText) === 1) {
+            return true;
+        }
+    }
     return false;
 }
