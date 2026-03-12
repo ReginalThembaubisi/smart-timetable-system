@@ -4,6 +4,7 @@ import '../config/app_colors.dart';
 import '../services/local_storage_service.dart';
 import 'change_password_screen.dart';
 import 'study_preferences_screen.dart';
+import 'study_plan_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Student student;
@@ -112,6 +113,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               trailing: const Icon(Icons.info_outline),
               onTap: () {
                 _showNotificationInfoDialog();
+              },
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.menu_book, color: Colors.deepPurple),
+              title: const Text('My Modules'),
+              subtitle: const Text('View your assigned modules'),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => StudyPlanScreen(student: widget.student),
+                  ),
+                );
               },
             ),
           ),

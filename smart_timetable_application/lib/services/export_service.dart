@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import '../models/student.dart';
 import '../models/study_session.dart';
+import '../models/outline_event.dart';
 import '../screens/session.dart';
 
 class ExportService {
@@ -848,6 +849,203 @@ class ExportService {
     return pdf.save();
   }
 
+  /// Generate and share/print a wall-poster-style important dates PDF.
+  static Future<void> exportImportantDatesAsPDF({
+    required BuildContext context,
+    required Student student,
+    required List<OutlineEvent> outlineEvents,
+  }) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          ),
+        ),
+      );
+
+      final pdfBytes = await _buildImportantDatesPDF(student, outlineEvents);
+
+      if (context.mounted) Navigator.pop(context);
+
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: 'important_dates_${student.studentNumber}.pdf',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting important dates: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  static Future<Uint8List> _buildImportantDatesPDF(
+    Student student,
+    List<OutlineEvent> outlineEvents,
+  ) async {
+    final pdf = pw.Document();
+    final now = DateTime.now();
+
+    final sorted = List<OutlineEvent>.from(outlineEvents)
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    final upcoming = sorted.where((e) => !e.date.isBefore(DateTime(now.year, now.month, now.day))).toList();
+    final rows = upcoming.isNotEmpty ? upcoming : sorted;
+
+    if (rows.isEmpty) {
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (context) => pw.Center(
+            child: pw.Text(
+              'No important dates available yet.\nScan a module handout to generate deadlines.',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 18),
+            ),
+          ),
+        ),
+      );
+      return pdf.save();
+    }
+
+    PdfColor typeColor(String type) {
+      switch (type.toLowerCase()) {
+        case 'test':
+          return const PdfColor.fromInt(0xFFFFF3CD);
+        case 'exam':
+          return const PdfColor.fromInt(0xFFFFD6D6);
+        case 'practical':
+          return const PdfColor.fromInt(0xFFD4EDDA);
+        default:
+          return const PdfColor.fromInt(0xFFD6E4FF);
+      }
+    }
+
+    String formatDate(DateTime d) {
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}';
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) => [
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            decoration: pw.BoxDecoration(
+              color: const PdfColor.fromInt(0xFF2E5BBA),
+              borderRadius: pw.BorderRadius.circular(8),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Important Academic Dates',
+                  style: pw.TextStyle(
+                    fontSize: 22,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  '${student.fullName} • ${student.studentNumber}',
+                  style: const pw.TextStyle(
+                    fontSize: 11,
+                    color: PdfColors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 14),
+          pw.Table(
+            border: pw.TableBorder.all(color: const PdfColor.fromInt(0xFFDDDDDD), width: 0.6),
+            columnWidths: const {
+              0: pw.FixedColumnWidth(95),
+              1: pw.FlexColumnWidth(2.5),
+              2: pw.FixedColumnWidth(80),
+              3: pw.FixedColumnWidth(85),
+              4: pw.FlexColumnWidth(1.5),
+            },
+            children: [
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF2F4F7)),
+                children: [
+                  _pdfHeaderCell('Date'),
+                  _pdfHeaderCell('Event'),
+                  _pdfHeaderCell('Type'),
+                  _pdfHeaderCell('Module'),
+                  _pdfHeaderCell('Time / Venue'),
+                ],
+              ),
+              ...rows.map((event) {
+                final info = [
+                  if (event.time != null && event.time!.isNotEmpty) event.time!,
+                  if (event.venue != null && event.venue!.isNotEmpty) event.venue!,
+                ].join(' • ');
+
+                return pw.TableRow(
+                  decoration: pw.BoxDecoration(
+                    color: typeColor(event.type).shade(0.85),
+                  ),
+                  children: [
+                    _pdfBodyCell(formatDate(event.date)),
+                    _pdfBodyCell(event.title),
+                    _pdfBodyCell(event.type.toUpperCase()),
+                    _pdfBodyCell(event.moduleCode),
+                    _pdfBodyCell(info.isEmpty ? '-' : info),
+                  ],
+                );
+              }),
+            ],
+          ),
+          pw.SizedBox(height: 10),
+          pw.Text(
+            'Tip: Print this page and place it where you study for quick daily checks.',
+            style: const pw.TextStyle(fontSize: 9, color: PdfColor.fromInt(0xFF666666)),
+          ),
+        ],
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  static pw.Widget _pdfHeaderCell(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+      ),
+    );
+  }
+
+  static pw.Widget _pdfBodyCell(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      child: pw.Text(
+        text,
+        style: const pw.TextStyle(fontSize: 8.5),
+      ),
+    );
+  }
+
   // ─── Helpers ────────────────────────────────────────────────────────
 
   static int _timeToMinutes(String time) {
@@ -883,6 +1081,7 @@ class ExportService {
     required Student student,
     required Map<String, Map<String, List<Session>>> timetableData,
     required List<StudySession> studySessions,
+    required List<OutlineEvent> outlineEvents,
   }) {
     showModalBottomSheet(
       context: context,
@@ -950,6 +1149,22 @@ class ExportService {
                         context: context,
                         student: student,
                         studySessions: studySessions,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildExportOption(
+                    context,
+                    'Print Important Dates (PDF)',
+                    'Deadlines and key dates in a wall-friendly format',
+                    Icons.event_note,
+                    const Color(0xFF2E5BBA),
+                    () {
+                      Navigator.pop(context);
+                      exportImportantDatesAsPDF(
+                        context: context,
+                        student: student,
+                        outlineEvents: outlineEvents,
                       );
                     },
                   ),

@@ -22,7 +22,6 @@ import 'create_session_screen.dart';
 import 'settings_screen.dart';
 import 'exam_timetable_screen.dart';
 import 'study_timer_screen.dart';
-import 'study_plan_screen.dart';
 import 'timetable_screen.dart';
 import 'outline_upload_screen.dart';
 import '../models/outline_event.dart';
@@ -1187,6 +1186,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             'Scan Handout',
             Icons.document_scanner,
             Colors.blue,
+            'Upload your module handout to extract tests, exams, and deadlines.',
             () {
               Navigator.push(
                 context,
@@ -1203,6 +1203,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             'Study Sessions',
             Icons.book,
             Colors.purple,
+            'View and manage all your planned study sessions.',
             () => _navigateToStudySessions(),
           ),
           
@@ -1212,6 +1213,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             'Add Study Session',
             Icons.add_circle,
             Colors.green,
+            'Create a new personal study session in seconds.',
             () => _navigateToCreateSession(),
           ),
           
@@ -1221,6 +1223,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             'Exam Timetables',
             Icons.calendar_today,
             Colors.red,
+            'Check published exam dates, venues, and updates.',
             () => _navigateToExamTimetables(),
             examNotificationCount,
           ),
@@ -1228,18 +1231,10 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
           const SizedBox(height: 12),
           
           _buildQuickActionButton(
-            'View Modules',
-            Icons.menu_book,
-            Colors.deepPurple,
-            () => _navigateToModules(),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          _buildQuickActionButton(
-            'Export Schedule',
+            'Export & Print',
             Icons.share,
             Colors.orange,
+            'Print your timetable or important dates for your wall.',
             () => _exportSchedule(),
           ),
         ],
@@ -1998,7 +1993,13 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
 
 // Method was moved to the top of the file for better organization during refactor.
 
-  Widget _buildQuickActionButton(String title, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildQuickActionButton(
+    String title,
+    IconData icon,
+    Color color,
+    String description,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -2024,13 +2025,26 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             Icon(icon, color: Colors.white, size: 28), // Larger icon
             const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16, // Larger text for mobile
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16, // Larger text for mobile
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
             const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16), // Navigation indicator
@@ -2040,7 +2054,14 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     );
   }
 
-  Widget _buildQuickActionButtonWithBadge(String title, IconData icon, Color color, VoidCallback onTap, int badgeCount) {
+  Widget _buildQuickActionButtonWithBadge(
+    String title,
+    IconData icon,
+    Color color,
+    String description,
+    VoidCallback onTap,
+    int badgeCount,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -2096,13 +2117,26 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16, // Larger text for mobile
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16, // Larger text for mobile
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
             const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16), // Navigation indicator
@@ -2664,21 +2698,13 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     _loadExamNotifications();
   }
 
-  void _navigateToModules() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => StudyPlanScreen(student: widget.student),
-      ),
-    );
-  }
-
   void _exportSchedule() {
     ExportService.showExportOptions(
       context: context,
       student: widget.student,
       timetableData: timetableData,
       studySessions: studySessions,
+      outlineEvents: outlineEvents,
     );
   }
 
