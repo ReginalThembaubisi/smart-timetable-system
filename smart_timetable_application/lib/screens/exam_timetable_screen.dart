@@ -17,9 +17,7 @@ class ExamTimetableScreen extends StatefulWidget {
   State<ExamTimetableScreen> createState() => _ExamTimetableScreenState();
 }
 
-class _ExamTimetableScreenState extends State<ExamTimetableScreen>
-    with TickerProviderStateMixin {
-  late TabController _tabController;
+class _ExamTimetableScreenState extends State<ExamTimetableScreen> {
   List<ExamTimetable> _timetables = [];
   List<ExamNotification> _notifications = [];
   bool _isLoading = true;
@@ -28,14 +26,7 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadExamData();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadExamData() async {
@@ -243,6 +234,91 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
     }
   }
 
+  Future<void> _markAllNotificationsAsRead() async {
+    final ids = _notifications.map((n) => n.notificationId).toList();
+    for (final id in ids) {
+      await _markNotificationAsRead(id);
+    }
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All notifications marked as read.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _showNotificationsPopup() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.72,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.notifications, color: Colors.white70),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Notifications (${_notifications.length})',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_notifications.isNotEmpty)
+                        TextButton(
+                          onPressed: _markAllNotificationsAsRead,
+                          child: const Text('Mark all read'),
+                        ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close, color: Colors.white54),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white12, height: 1),
+                if (_notifications.isEmpty)
+                  const Expanded(
+                    child: Center(
+                      child: EmptyNotificationsState(),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _notifications.length,
+                      itemBuilder: (context, index) {
+                        final notification = _notifications[index];
+                        return _buildNotificationCard(notification);
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -255,56 +331,40 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
         backgroundColor: AppColors.surface,
         foregroundColor: Colors.white,
         elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: AppColors.primary,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white54,
-          tabs: [
-            const Tab(
-              icon: Icon(Icons.calendar_today),
-              text: 'Timetables',
-            ),
-            Tab(
-              icon: const Icon(Icons.notifications),
-              child: _notifications.isNotEmpty
-                  ? Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.only(right: 12),
-                          child: Text('Notifications'),
+        actions: [
+          IconButton(
+            onPressed: _showNotificationsPopup,
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.notifications),
+                if (_notifications.isNotEmpty)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      child: Text(
+                        '${_notifications.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
                         ),
-                        Positioned(
-                          right: 0,
-                          top: -4,
-                          child: Container(
-                            padding: const EdgeInsets.all(3),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '${_notifications.length}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : const Text('Notifications'),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          ],
-        ),
+            tooltip: 'Notifications',
+          ),
+        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -318,13 +378,7 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
             ? _buildLoadingState()
             : _error != null
                 ? _buildErrorWidget()
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildTimetablesTab(),
-                      _buildNotificationsTab(),
-                    ],
-                  ),
+                : _buildTimetablesTab(),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _loadExamData,
@@ -555,23 +609,6 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildNotificationsTab() {
-    if (_notifications.isEmpty) {
-      return Center(
-        child: EmptyNotificationsState(),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _notifications.length,
-      itemBuilder: (context, index) {
-        final notification = _notifications[index];
-        return _buildNotificationCard(notification);
-      },
     );
   }
 

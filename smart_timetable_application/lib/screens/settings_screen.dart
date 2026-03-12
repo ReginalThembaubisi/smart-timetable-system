@@ -108,10 +108,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: ListTile(
               leading: const Icon(Icons.notifications),
               title: const Text('Notifications'),
-              subtitle: const Text('Manage notification preferences'),
-              trailing: const Icon(Icons.arrow_forward_ios),
+              subtitle: const Text('How reminders work in the app'),
+              trailing: const Icon(Icons.info_outline),
               onTap: () {
-                // Navigate to notifications settings
+                _showNotificationInfoDialog();
               },
             ),
           ),
@@ -169,6 +169,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 }
               },
               child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showNotificationInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Notification Tips'),
+          content: const Text(
+            'Important alerts are automatic:\n\n'
+            '- Exam timetable updates appear from the bell icon in Exam Timetables\n'
+            '- Test and exam reminders are scheduled for upcoming deadlines\n'
+            '- Study session reminders follow your preferred reminder time',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                final changed = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const StudyPreferencesScreen(),
+                  ),
+                );
+                if (changed == true) _loadPreferenceLabel();
+              },
+              child: const Text('Reminder Time'),
             ),
           ],
         );
