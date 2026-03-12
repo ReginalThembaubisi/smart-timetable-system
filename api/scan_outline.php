@@ -626,7 +626,6 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
 
     foreach ($lines as $index => $line) {
         $line = trim($line);
-        $line = cleanEventTitle($line);
         if ($line === '' || strlen($line) < 6) continue;
 
         $looksLikeAssessment = hasAssessmentKeyword($line);
