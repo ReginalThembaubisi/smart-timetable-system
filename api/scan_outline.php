@@ -426,9 +426,26 @@ function normaliseDateString(string $raw): ?string
     $value = trim($raw);
     if ($value === '') return null;
 
+    // Normalise dash variants from PDFs/OCR: –, —, etc.
+    $value = preg_replace('/[\x{2012}-\x{2015}]/u', '-', $value) ?? $value;
+
     // Remove ordinal suffixes: 1st, 2nd, 3rd, 4th...
     $value = preg_replace('/\b(\d{1,2})(st|nd|rd|th)\b/i', '$1', $value) ?? $value;
     $value = trim($value);
+
+    // Handle week ranges like:
+    // "Week of 16-20 March 2026" or "16-20 March 2026"
+    $weekValue = preg_replace('/^\s*week\s+of\s+/i', '', $value) ?? $value;
+    if (preg_match('/^(\d{1,2})\s*-\s*(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$/i', $weekValue, $m)) {
+        $firstDay = (int)$m[1];
+        $monthName = $m[3];
+        $year = (int)$m[4];
+        $dt = DateTime::createFromFormat('!j M Y', "$firstDay $monthName $year")
+            ?: DateTime::createFromFormat('!j F Y', "$firstDay $monthName $year");
+        if ($dt instanceof DateTime) {
+            return $dt->format('Y-m-d');
+        }
+    }
 
     // Already normalised
     if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
@@ -483,6 +500,7 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
     $seen = [];
 
     $datePatterns = [
+        '/\b(?:week\s+of\s+)?\d{1,2}\s*[–-]\s*\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{4}\b/i',
         '/\b\d{4}-\d{2}-\d{2}\b/',
         '/\b\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?\b/',
         '/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\b(?:,?\s*\d{4})?/i',
