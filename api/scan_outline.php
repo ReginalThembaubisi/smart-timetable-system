@@ -252,28 +252,45 @@ function extractTextFromUploadedFile(string $tmpPath, string $fileName, string $
 
 function extractTextFromDocx(string $tmpPath): string
 {
-    if (!class_exists('ZipArchive')) {
-        return '';
-    }
-
-    $zip = new ZipArchive();
-    if ($zip->open($tmpPath) !== true) {
-        return '';
-    }
-
+    $entries = ['word/document.xml', 'word/header1.xml', 'word/header2.xml', 'word/footer1.xml', 'word/footer2.xml'];
     $parts = [];
-    foreach (['word/document.xml', 'word/header1.xml', 'word/header2.xml', 'word/footer1.xml', 'word/footer2.xml'] as $entry) {
-        $xml = $zip->getFromName($entry);
-        if ($xml === false) {
-            continue;
-        }
-        $xml = preg_replace('/<\/w:p>/', "\n", $xml);
-        $xml = preg_replace('/<[^>]+>/', '', $xml);
-        $parts[] = html_entity_decode($xml, ENT_QUOTES | ENT_XML1, 'UTF-8');
-    }
-    $zip->close();
 
-    $text = trim(implode("\n", $parts));
+    // Primary path: PHP zip extension.
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($tmpPath) === true) {
+            foreach ($entries as $entry) {
+                $xml = $zip->getFromName($entry);
+                if ($xml !== false) {
+                    $parts[] = $xml;
+                }
+            }
+            $zip->close();
+        }
+    }
+
+    // Fallback path: shell unzip (helps when ZipArchive extension is unavailable).
+    if (empty($parts) && function_exists('exec')) {
+        $escapedFile = escapeshellarg($tmpPath);
+        foreach ($entries as $entry) {
+            $escapedEntry = escapeshellarg($entry);
+            $output = [];
+            exec("unzip -p $escapedFile $escapedEntry 2>/dev/null", $output, $code);
+            if ($code === 0 && !empty($output)) {
+                $parts[] = implode("\n", $output);
+            }
+        }
+    }
+
+    if (empty($parts)) {
+        return '';
+    }
+
+    $combinedXml = implode("\n", $parts);
+    $combinedXml = preg_replace('/<\/w:p>/', "\n", $combinedXml);
+    $combinedXml = preg_replace('/<[^>]+>/', '', $combinedXml);
+    $text = html_entity_decode($combinedXml, ENT_QUOTES | ENT_XML1, 'UTF-8');
+    $text = trim($text);
     return preg_replace('/\n{3,}/', "\n\n", $text) ?? '';
 }
 
