@@ -793,11 +793,11 @@ function extractStructuredAssessmentRows(string $text, string $moduleCode): arra
 
     $patterns = [
         // Test 1 / Test l / Test I
-        ['/(?:\bsemester\s+)?\btest\s*[1il]\b.{0,80}?\b(?:week\s+of\s+)?(\d{1,2}\s*-\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/i', 'Test 1', 'Test'],
+        ['/\b(?:semester\s*test|class\s*test|test)\s*[1il]\s*(?:\([^)]*\))?\s*(?:-|:)?\s*(?:week\s+of\s+)?(\d{1,2}\s*-\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/i', 'Test 1', 'Test'],
         // Test 2
-        ['/(?:\bsemester\s+)?\btest\s*2\b.{0,80}?\b(?:week\s+of\s+)?(\d{1,2}\s*-\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/i', 'Test 2', 'Test'],
+        ['/\b(?:semester\s*test|class\s*test|test)\s*2\s*(?:\([^)]*\))?\s*(?:-|:)?\s*(?:week\s+of\s+)?(\d{1,2}\s*-\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/i', 'Test 2', 'Test'],
         // Sick test
-        ['/\bsick\s+test\b.{0,120}?\b(?:week\s+of\s+)?(\d{1,2}\s*-\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/i', 'Sick test', 'Test'],
+        ['/\bsick\s+test\s*(?:\([^)]*\))?\s*(?:-|:)?\s*(?:week\s+of\s+)?(\d{1,2}\s*-\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/i', 'Sick test', 'Test'],
     ];
 
     foreach ($patterns as [$regex, $title, $type]) {
