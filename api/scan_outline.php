@@ -239,6 +239,10 @@ if (!empty($cleaned)) {
 
 if (empty($cleaned)) {
     $cleaned = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
+} else {
+    // Always merge deterministic extraction so table dates are not missed when
+    // AI under-extracts (common with PDF/OCR and week-range rows).
+    $cleaned = mergeEventLists($cleaned, extractEventsFromTextHeuristic($syllabusText, $moduleCode));
 }
 
 sendJSONResponse(true, ['events' => $cleaned], 'Events extracted successfully');
@@ -579,7 +583,8 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
         if ($dateStr === null) continue;
 
         $type = normaliseType($line);
-        $title = trim(preg_replace('/\s+/', ' ', $line) ?? $line);
+        $title = trim(str_replace($matchedDate, '', $line));
+        $title = trim(preg_replace('/\s+/', ' ', $title) ?? $title);
         if (strlen($title) > 120) {
             $title = substr($title, 0, 117) . '...';
         }
@@ -672,6 +677,45 @@ function extractTimeFromLine(string $line): ?string
         return sprintf('%02d:%02d', $hour, $min);
     }
     return null;
+}
+
+function mergeEventLists(array $primary, array $secondary): array
+{
+    $merged = [];
+    $seen = [];
+
+    foreach ([$primary, $secondary] as $list) {
+        foreach ($list as $event) {
+            if (!is_array($event)) continue;
+            $key = eventDedupKey($event);
+            if ($key === '') continue;
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+            $merged[] = $event;
+        }
+    }
+
+    usort($merged, static function ($a, $b) {
+        $ad = (string)($a['date'] ?? '');
+        $bd = (string)($b['date'] ?? '');
+        return strcmp($ad, $bd);
+    });
+
+    return $merged;
+}
+
+function eventDedupKey(array $event): string
+{
+    $date = strtolower(trim((string)($event['date'] ?? '')));
+    $title = strtolower(trim((string)($event['title'] ?? '')));
+    if ($date === '' || $title === '') return '';
+
+    $title = preg_replace('/\s+/', ' ', $title) ?? $title;
+    $title = preg_replace('/[^a-z0-9\s]/', '', $title) ?? $title;
+    $title = trim($title);
+    if ($title === '') return '';
+
+    return $date . '|' . $title;
 }
 
 function cleanEventTitle(string $raw): string
