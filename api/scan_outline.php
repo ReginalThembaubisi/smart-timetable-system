@@ -532,12 +532,6 @@ function normaliseDateString(string $raw): ?string
         }
     }
 
-    // Final fallback via strtotime for uncommon, but valid date strings.
-    $ts = strtotime($value);
-    if ($ts !== false) {
-        return date('Y-m-d', $ts);
-    }
-
     return null;
 }
 
@@ -560,14 +554,7 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
         $line = cleanEventTitle($line);
         if ($line === '' || strlen($line) < 6) continue;
 
-        $lower = strtolower($line);
-        $looksLikeAssessment = str_contains($lower, 'test')
-            || str_contains($lower, 'exam')
-            || str_contains($lower, 'assignment')
-            || str_contains($lower, 'practical')
-            || str_contains($lower, 'project')
-            || str_contains($lower, 'submission')
-            || str_contains($lower, 'due');
+        $looksLikeAssessment = hasAssessmentKeyword($line);
         if (!$looksLikeAssessment) continue;
 
         $matchedDate = null;
@@ -588,7 +575,7 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
         if (strlen($title) > 120) {
             $title = substr($title, 0, 117) . '...';
         }
-        if ($title === '') {
+        if ($title === '' || isLikelyGibberish($title)) {
             $title = $type . ' event';
         }
 
@@ -629,6 +616,11 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
             $dateStr = normaliseDateString($matchedDate);
             if ($dateStr === null) continue;
 
+            $context = $line;
+            if ($index > 0) $context .= ' ' . trim($lines[$index - 1] ?? '');
+            if ($index + 1 < $lineCount) $context .= ' ' . trim($lines[$index + 1] ?? '');
+            if (!hasAssessmentKeyword($context)) continue;
+
             $title = trim(str_replace($matchedDate, '', $line));
             if ($title === '' && $index > 0) {
                 $title = cleanEventTitle(trim($lines[$index - 1] ?? ''));
@@ -636,7 +628,7 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
             if ($title === '' && $index + 1 < $lineCount) {
                 $title = cleanEventTitle(trim($lines[$index + 1] ?? ''));
             }
-            if ($title === '') {
+            if ($title === '' || isLikelyGibberish($title)) {
                 $title = 'Important date';
             }
             if (strlen($title) > 120) {
@@ -677,6 +669,11 @@ function extractTimeFromLine(string $line): ?string
         return sprintf('%02d:%02d', $hour, $min);
     }
     return null;
+}
+
+function hasAssessmentKeyword(string $text): bool
+{
+    return preg_match('/\b(test|exam|assignment|practical|quiz|project|submission|due|assessment|sick test)\b/i', $text) === 1;
 }
 
 function mergeEventLists(array $primary, array $secondary): array
