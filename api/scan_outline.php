@@ -635,6 +635,9 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
         $seen[$key] = true;
         $results[] = $ev;
     }
+    if (!empty($results)) {
+        return $results;
+    }
 
     foreach ($lines as $index => $line) {
         $line = trim($line);
