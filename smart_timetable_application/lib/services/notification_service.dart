@@ -409,11 +409,30 @@ class NotificationService {
     if (_flutterLocalNotificationsPlugin == null) return null;
     
     try {
-      final reminderId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final reminderDate = deadlineDate.subtract(const Duration(days: 7));
-      
-      // Only schedule if the reminder date is in the future
-      if (reminderDate.isAfter(DateTime.now())) {
+      final reminderId =
+          '${title}_${deadlineDate.toIso8601String()}_$type'.hashCode & 0x7fffffff;
+      final now = DateTime.now();
+      DateTime? reminderDate;
+      String leadLabel = '7 days';
+
+      final sevenDaysBefore = deadlineDate.subtract(const Duration(days: 7));
+      final oneDayBefore = deadlineDate.subtract(const Duration(days: 1));
+      final twoHoursBefore = deadlineDate.subtract(const Duration(hours: 2));
+
+      // Pick the best available lead time, so students still get reminders for near dates.
+      if (sevenDaysBefore.isAfter(now)) {
+        reminderDate = sevenDaysBefore;
+        leadLabel = '7 days';
+      } else if (oneDayBefore.isAfter(now)) {
+        reminderDate = oneDayBefore;
+        leadLabel = '1 day';
+      } else if (twoHoursBefore.isAfter(now)) {
+        reminderDate = twoHoursBefore;
+        leadLabel = '2 hours';
+      }
+
+      // Only schedule if a valid reminder window is still in the future.
+      if (reminderDate != null && reminderDate.isAfter(now)) {
         const AndroidNotificationDetails androidPlatformChannelSpecifics =
             AndroidNotificationDetails(
           'deadlines_reminders',
@@ -445,7 +464,7 @@ class NotificationService {
             await _flutterLocalNotificationsPlugin!.zonedSchedule(
               reminderId,
               '🔔 Upcoming $type',
-              'Your $title is due in 7 days!',
+              'Your $title is due in $leadLabel.',
               tz.TZDateTime.from(reminderDate, tz.local),
               platformChannelSpecifics,
               payload: 'deadline_$reminderId',
@@ -456,7 +475,7 @@ class NotificationService {
             await _flutterLocalNotificationsPlugin!.zonedSchedule(
               reminderId,
               '🔔 Upcoming $type',
-              'Your $title is due in 7 days!',
+              'Your $title is due in $leadLabel.',
               tz.TZDateTime.from(reminderDate, tz.local),
               platformChannelSpecifics,
               payload: 'deadline_$reminderId',
@@ -465,7 +484,7 @@ class NotificationService {
           }
         }
         
-        print('Scheduled reminder for $title on $reminderDate');
+        print('Scheduled reminder for $title on $reminderDate ($leadLabel early)');
         return reminderId;
       }
     } catch (e) {

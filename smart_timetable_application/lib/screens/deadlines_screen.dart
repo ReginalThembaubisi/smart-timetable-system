@@ -33,11 +33,46 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
   Future<void> _loadData() async {
     await _storageService.initialize();
     final events = await _storageService.getOutlineEvents();
+    final eventsWithAutoReminders = await _autoScheduleImportantReminders(events);
     setState(() {
-      _allEvents = events;
-      _filteredEvents = events;
+      _allEvents = eventsWithAutoReminders;
+      _filteredEvents = eventsWithAutoReminders;
       _isLoading = false;
     });
+  }
+
+  Future<List<OutlineEvent>> _autoScheduleImportantReminders(List<OutlineEvent> events) async {
+    final now = DateTime.now();
+    var changed = false;
+    final updated = <OutlineEvent>[];
+
+    for (final event in events) {
+      // Focus automatic reminders on high-impact assessments.
+      final normalizedType = event.type.toLowerCase();
+      final shouldAutoRemind =
+          normalizedType == 'test' || normalizedType == 'exam';
+      final isFuture = event.date.isAfter(now);
+
+      if (shouldAutoRemind && isFuture && !event.isReminderSet) {
+        final reminderId = await NotificationService.scheduleDeadlinesReminder(
+          event.title,
+          event.date,
+          event.type,
+        );
+        if (reminderId != null) {
+          updated.add(event.copyWith(isReminderSet: true, reminderId: reminderId));
+          changed = true;
+          continue;
+        }
+      }
+
+      updated.add(event);
+    }
+
+    if (changed) {
+      await _storageService.saveOutlineEvents(updated);
+    }
+    return updated;
   }
 
   void _filterEvents() {

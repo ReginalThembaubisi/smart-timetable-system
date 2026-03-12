@@ -83,9 +83,12 @@ class LocalStorageService {
       final cleanedIncoming = events.where((event) => !_isLegacyDemoEvent(event)).toList();
       // Merge with existing events to avoid overwriting
       final existing = getOutlineEvents();
-      // Simple de-duplication based on title and date
+      // Upsert by title and date so reminder toggles and edits persist correctly.
       for (var newEvent in cleanedIncoming) {
-        if (!existing.any((e) => e.title == newEvent.title && e.date == newEvent.date)) {
+        final index = existing.indexWhere((e) => e.title == newEvent.title && e.date == newEvent.date);
+        if (index >= 0) {
+          existing[index] = newEvent;
+        } else {
           existing.add(newEvent);
         }
       }

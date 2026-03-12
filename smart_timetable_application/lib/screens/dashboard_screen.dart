@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:async';
 import '../models/student.dart';
 import '../models/module.dart';
 import '../models/study_session.dart';
@@ -80,6 +81,8 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   
   // Exam notifications
   int examNotificationCount = 0;
+  Timer? _examNotificationRefreshTimer;
+  bool _examNotificationBaselineLoaded = false;
 
   @override
   void initState() {
@@ -89,6 +92,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     _setTodayAsDefault();
     _loadStudySessions();
     _loadExamNotifications();
+    _startExamNotificationPolling();
   }
 
   void _initializeAnimations() {
@@ -113,9 +117,18 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
 
   @override
   void dispose() {
+    _examNotificationRefreshTimer?.cancel();
     _progressController.dispose();
     _fadeController.dispose();
     super.dispose();
+  }
+
+  void _startExamNotificationPolling() {
+    _examNotificationRefreshTimer?.cancel();
+    _examNotificationRefreshTimer = Timer.periodic(
+      const Duration(minutes: 2),
+      (_) => _loadExamNotifications(),
+    );
   }
 
   void _setTodayAsDefault() {
@@ -307,9 +320,27 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
         final unread = notificationList
             .where((n) => n['is_read'] == 0 || n['is_read'] == false)
             .toList();
+        final previousCount = examNotificationCount;
         setState(() {
           examNotificationCount = unread.length;
         });
+
+        if (_examNotificationBaselineLoaded &&
+            mounted &&
+            unread.length > previousCount) {
+          final added = unread.length - previousCount;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                added == 1
+                    ? 'New exam timetable update available. Open Exams to view it.'
+                    : '$added new exam timetable updates available. Open Exams to view them.',
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        _examNotificationBaselineLoaded = true;
       }
     } catch (e) {
       debugPrint('Error loading exam notifications: $e');
