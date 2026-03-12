@@ -806,7 +806,16 @@ function cleanEventTitle(string $raw): string
     $title = preg_replace('/\s+/', ' ', $title) ?? $title;
     $title = trim($title, " \t\n\r\0\x0B-:|");
 
+    // Condense noisy table/OCR lines into concise assessment labels.
+    if (preg_match('/(sick\s*test|semester\s*test\s*\d*|class\s*test\s*\d*|test\s*[0-9il]+|assignment\s*\d*|quiz(?:zes)?|project(?:\s*submission)?)/i', $title, $m)) {
+        $label = preg_replace('/\s+/', ' ', trim($m[1])) ?? trim($m[1]);
+        $label = preg_replace('/\btest\s+l\b/i', 'Test 1', $label) ?? $label;
+        $label = ucwords(strtolower($label));
+        if ($label !== '') return $label;
+    }
+
     if ($title === '' || isLikelyGibberish($title)) return 'Untitled event';
+    if (str_word_count($title) > 10) return 'Important assessment';
     if (strlen($title) > 120) {
         $title = substr($title, 0, 117) . '...';
     }
