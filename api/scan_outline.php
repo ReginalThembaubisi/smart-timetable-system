@@ -489,7 +489,7 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
         '/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?\b(?:,?\s*\d{4})?/i',
     ];
 
-    foreach ($lines as $line) {
+    foreach ($lines as $index => $line) {
         $line = trim($line);
         if ($line === '' || strlen($line) < 6) continue;
 
@@ -528,10 +528,7 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
         if (isset($seen[$key])) continue;
         $seen[$key] = true;
 
-        $time = null;
-        if (preg_match('/\b([01]?\d|2[0-3]):([0-5]\d)\b/', $line, $tm)) {
-            $time = sprintf('%02d:%02d', (int)$tm[1], (int)$tm[2]);
-        }
+        $time = extractTimeFromLine($line);
 
         $results[] = [
             'title' => $title,
@@ -544,5 +541,72 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
         ];
     }
 
+    // Second pass: if nothing found, extract any recognisable date lines.
+    // This helps for table-style handouts where labels and dates are split.
+    if (empty($results)) {
+        $lineCount = count($lines);
+        foreach ($lines as $index => $line) {
+            $line = trim($line);
+            if ($line === '' || strlen($line) < 3) continue;
+
+            $matchedDate = null;
+            foreach ($datePatterns as $pattern) {
+                if (preg_match($pattern, $line, $m)) {
+                    $matchedDate = $m[0];
+                    break;
+                }
+            }
+            if ($matchedDate === null) continue;
+
+            $dateStr = normaliseDateString($matchedDate);
+            if ($dateStr === null) continue;
+
+            $title = trim(str_replace($matchedDate, '', $line));
+            if ($title === '' && $index > 0) {
+                $title = trim($lines[$index - 1] ?? '');
+            }
+            if ($title === '' && $index + 1 < $lineCount) {
+                $title = trim($lines[$index + 1] ?? '');
+            }
+            if ($title === '') {
+                $title = 'Important date';
+            }
+            if (strlen($title) > 120) {
+                $title = substr($title, 0, 117) . '...';
+            }
+
+            $type = normaliseType($title . ' ' . $line);
+            $key = strtolower($title . '|' . $dateStr);
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+
+            $results[] = [
+                'title' => $title,
+                'date' => $dateStr,
+                'type' => $type,
+                'moduleCode' => $moduleCode,
+                'time' => extractTimeFromLine($line),
+                'venue' => null,
+                'isReminderSet' => false,
+            ];
+        }
+    }
+
     return $results;
+}
+
+function extractTimeFromLine(string $line): ?string
+{
+    if (preg_match('/\b([01]?\d|2[0-3]):([0-5]\d)\b/', $line, $tm)) {
+        return sprintf('%02d:%02d', (int)$tm[1], (int)$tm[2]);
+    }
+    if (preg_match('/\b(1[0-2]|0?[1-9])(?:[:.]([0-5]\d))?\s*(am|pm)\b/i', $line, $tm)) {
+        $hour = (int)$tm[1];
+        $min = isset($tm[2]) && $tm[2] !== '' ? (int)$tm[2] : 0;
+        $ampm = strtolower($tm[3]);
+        if ($ampm === 'pm' && $hour !== 12) $hour += 12;
+        if ($ampm === 'am' && $hour === 12) $hour = 0;
+        return sprintf('%02d:%02d', $hour, $min);
+    }
+    return null;
 }
