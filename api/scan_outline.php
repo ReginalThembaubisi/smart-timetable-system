@@ -600,14 +600,6 @@ function normaliseDateString(string $raw): ?string
         }
     }
 
-    // Day/month without year -> assume 2026 for current academic cycle.
-    if (preg_match('/^(\d{1,2})[\/\-.](\d{1,2})$/', $value, $m)) {
-        $day = (int)$m[1];
-        $month = (int)$m[2];
-        if (checkdate($month, $day, 2026)) {
-            return sprintf('2026-%02d-%02d', $month, $day);
-        }
-    }
     if (preg_match('/^(\d{1,2})\s+([A-Za-z]{3,9})$/', $value, $m)) {
         $dt = DateTime::createFromFormat('!j M Y', "{$m[1]} {$m[2]} 2026")
             ?: DateTime::createFromFormat('!j F Y', "{$m[1]} {$m[2]} 2026");
@@ -625,14 +617,6 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
     $results = [];
     $seen = [];
 
-    $datePatterns = [
-        '/\b(?:week\s+of\s+)?\d{1,2}\s*[–-]\s*\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{4}\b/i',
-        '/\b\d{4}-\d{2}-\d{2}\b/',
-        '/\b\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?\b/',
-        '/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\b(?:,?\s*\d{4})?/i',
-        '/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?\b(?:,?\s*\d{4})?/i',
-    ];
-
     foreach ($lines as $index => $line) {
         $line = trim($line);
         $line = cleanEventTitle($line);
@@ -641,14 +625,7 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
         $looksLikeAssessment = hasAssessmentKeyword($line);
         if (!$looksLikeAssessment) continue;
 
-        $dateMatches = [];
-        foreach ($datePatterns as $pattern) {
-            if (preg_match_all($pattern, $line, $m)) {
-                foreach (($m[0] ?? []) as $hit) {
-                    $dateMatches[] = $hit;
-                }
-            }
-        }
+        $dateMatches = extractDateCandidatesFromText($line);
         if (empty($dateMatches)) continue;
 
         $context = $line;
@@ -686,14 +663,7 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
             $line = trim($line);
             if ($line === '' || strlen($line) < 3) continue;
 
-            $matchedDates = [];
-            foreach ($datePatterns as $pattern) {
-                if (preg_match_all($pattern, $line, $m)) {
-                    foreach (($m[0] ?? []) as $hit) {
-                        $matchedDates[] = $hit;
-                    }
-                }
-            }
+            $matchedDates = extractDateCandidatesFromText($line);
             if (empty($matchedDates)) continue;
 
             $context = $line;
@@ -760,6 +730,37 @@ function inferTitleForDate(string $line, string $matchedDate, string $context): 
     }
 
     return cleanEventTitle(normaliseType($context) . ' event');
+}
+
+function extractDateCandidatesFromText(string $text): array
+{
+    $candidates = [];
+    $remainder = $text;
+
+    $rangePattern = '/\b(?:week\s+of\s+)?\d{1,2}\s*[–-]\s*\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{4}\b/i';
+    if (preg_match_all($rangePattern, $text, $rm)) {
+        foreach (($rm[0] ?? []) as $hit) {
+            $candidates[] = $hit;
+            $remainder = str_replace($hit, ' ', $remainder);
+        }
+    }
+
+    $patterns = [
+        '/\b\d{4}-\d{2}-\d{2}\b/',
+        '/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/',
+        '/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\b(?:,?\s*\d{4})?/i',
+        '/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?\b(?:,?\s*\d{4})?/i',
+    ];
+
+    foreach ($patterns as $pattern) {
+        if (preg_match_all($pattern, $remainder, $m)) {
+            foreach (($m[0] ?? []) as $hit) {
+                $candidates[] = $hit;
+            }
+        }
+    }
+
+    return array_values(array_unique($candidates));
 }
 
 function hasAssessmentKeyword(string $text): bool
