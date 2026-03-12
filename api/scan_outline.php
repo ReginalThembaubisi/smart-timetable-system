@@ -92,7 +92,7 @@ $parserOnlyMode = true;
 if ($isUploadedDocument) {
     $pythonEvents = extractEventsWithPython($uploadedFileTmp, $uploadedFileName, $moduleCode);
     if ($pythonEvents !== null && !empty($pythonEvents)) {
-        sendJSONResponse(true, ['events' => $pythonEvents], 'Events extracted successfully [upload-parser-v2:python]');
+        sendJSONResponse(true, ['events' => $pythonEvents], 'Events extracted successfully');
     }
 
     $deterministic = $pythonEvents ?? [];
@@ -100,7 +100,7 @@ if ($isUploadedDocument) {
         $deterministic = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
     }
     if (!empty($deterministic)) {
-        sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully [upload-parser-v2:php-fallback]');
+        sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully');
     }
     sendJSONResponse(true, ['events' => []], 'No assessment dates found in uploaded document.');
 }
@@ -108,7 +108,7 @@ if ($isUploadedDocument) {
 if ($parserOnlyMode) {
     $deterministic = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
     if (!empty($deterministic)) {
-        sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully [parser-only]');
+        sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully');
     }
     sendJSONResponse(true, ['events' => []], 'No assessment dates found in provided text.');
 }
