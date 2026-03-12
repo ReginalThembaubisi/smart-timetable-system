@@ -9,7 +9,8 @@ nixPkgs = [
     "php82Packages.composer",
     "caddy",
     "mysql-client",
-    "poppler_utils"
+    "poppler_utils",
+    "tesseract"
 ]
 
 [phases.install]

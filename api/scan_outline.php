@@ -61,11 +61,13 @@ if (empty($moduleCode)) {
 }
 if (strlen($syllabusText) < 10) {
     $pdfAvailable = function_exists('exec') ? shell_exec('which pdftotext 2>/dev/null') : 'exec disabled';
+    $ocrAvailable = function_exists('exec') ? shell_exec('which tesseract 2>/dev/null') : 'exec disabled';
     sendJSONResponse(
         false,
         null,
         'Could not extract readable text from the uploaded document. Supported formats: PDF, DOCX, TXT. ' .
-        'pdftotext: ' . trim($pdfAvailable ?: 'not found') . '. You can still paste the text directly.',
+        'pdftotext: ' . trim($pdfAvailable ?: 'not found') . '; OCR(tesseract): ' . trim($ocrAvailable ?: 'not found') .
+        '. You can still paste the text directly.',
         400
     );
 }
@@ -310,38 +312,113 @@ function extractTextFromDocx(string $tmpPath): string
 
 function extractTextFromPdf(string $tmpPath): string
 {
-    // Try pdftotext (poppler-utils) — fast and accurate
+    $text = '';
+
+    // Try pdftotext (poppler-utils) first — fast and accurate for text PDFs.
     if (function_exists('exec')) {
         $escaped = escapeshellarg($tmpPath);
         $output  = [];
         exec("pdftotext -layout $escaped - 2>/dev/null", $output, $code);
         if ($code === 0 && !empty($output)) {
-            return implode("\n", $output);
+            $text = trim(implode("\n", $output));
         }
     }
 
-    // Fallback: read raw PDF bytes and extract readable ASCII text
-    // This works for simple text-based PDFs without a parser
+    // OCR fallback for scanned/image PDFs when extracted text is too weak.
+    if (strlen($text) < 80) {
+        $ocrText = extractTextFromPdfUsingOcr($tmpPath, 8);
+        if (strlen(trim($ocrText)) > strlen(trim($text))) {
+            $text = trim($ocrText);
+        }
+    }
+
+    if (strlen($text) >= 20) {
+        return $text;
+    }
+
+    // Last fallback: read raw PDF bytes and extract readable ASCII text.
+    // This works for simple text-based PDFs without a full parser.
     $raw  = file_get_contents($tmpPath);
-    if ($raw === false) return '';
+    if ($raw === false) return $text;
 
     // Pull out text between BT/ET blocks (basic PDF text extraction)
-    $text = '';
+    $basicText = '';
     if (preg_match_all('/BT[\s\S]*?ET/', $raw, $blocks)) {
         foreach ($blocks[0] as $block) {
             if (preg_match_all('/\(([^)]+)\)/', $block, $strings)) {
-                $text .= implode(' ', $strings[1]) . "\n";
+                $basicText .= implode(' ', $strings[1]) . "\n";
             }
         }
     }
 
     // If that yields nothing, return whatever printable chars exist
-    if (strlen(trim($text)) < 20) {
-        $text = preg_replace('/[^\x20-\x7E\n\r\t]/', ' ', $raw);
-        $text = preg_replace('/\s{3,}/', "\n", $text);
+    if (strlen(trim($basicText)) < 20) {
+        $basicText = preg_replace('/[^\x20-\x7E\n\r\t]/', ' ', $raw);
+        $basicText = preg_replace('/\s{3,}/', "\n", $basicText);
+    }
+
+    if (strlen(trim($basicText)) > strlen(trim($text))) {
+        $text = $basicText;
     }
 
     return trim($text);
+}
+
+function extractTextFromPdfUsingOcr(string $tmpPath, int $maxPages = 8): string
+{
+    if (!function_exists('exec')) {
+        return '';
+    }
+
+    $tmpDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pdfocr_' . uniqid('', true);
+    if (!@mkdir($tmpDir, 0700, true) && !is_dir($tmpDir)) {
+        return '';
+    }
+
+    $escapedPdf = escapeshellarg($tmpPath);
+    $outputPrefix = $tmpDir . DIRECTORY_SEPARATOR . 'page';
+    $escapedPrefix = escapeshellarg($outputPrefix);
+
+    // Render first N pages as PNG files for OCR.
+    $renderOut = [];
+    exec("pdftoppm -png -f 1 -l $maxPages $escapedPdf $escapedPrefix 2>/dev/null", $renderOut, $renderCode);
+    if ($renderCode !== 0) {
+        cleanupDirectory($tmpDir);
+        return '';
+    }
+
+    $images = glob($tmpDir . DIRECTORY_SEPARATOR . 'page-*.png');
+    if (!$images) {
+        cleanupDirectory($tmpDir);
+        return '';
+    }
+
+    natsort($images);
+    $textParts = [];
+
+    foreach ($images as $imagePath) {
+        $ocrOut = [];
+        $escapedImage = escapeshellarg($imagePath);
+        exec("tesseract $escapedImage stdout -l eng --psm 6 2>/dev/null", $ocrOut, $ocrCode);
+        if ($ocrCode === 0 && !empty($ocrOut)) {
+            $textParts[] = implode("\n", $ocrOut);
+        }
+    }
+
+    cleanupDirectory($tmpDir);
+    return trim(implode("\n\n", $textParts));
+}
+
+function cleanupDirectory(string $dir): void
+{
+    if (!is_dir($dir)) return;
+    $files = glob($dir . DIRECTORY_SEPARATOR . '*');
+    if ($files) {
+        foreach ($files as $f) {
+            @unlink($f);
+        }
+    }
+    @rmdir($dir);
 }
 
 function normaliseDateString(string $raw): ?string
