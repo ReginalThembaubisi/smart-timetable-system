@@ -314,7 +314,14 @@ function extractEventsWithPython(string $tmpPath, string $fileName, string $modu
 
     $output = [];
     $code = 1;
-    foreach (['python3', 'python'] as $pythonBin) {
+    $candidates = [];
+    $envPython = trim((string)getenv('PYTHON_BIN'));
+    if ($envPython !== '') $candidates[] = $envPython;
+    $candidates[] = 'python3';
+    $candidates[] = 'python';
+    $candidates = array_values(array_unique($candidates));
+
+    foreach ($candidates as $pythonBin) {
         $cmd = escapeshellcmd($pythonBin) . ' ' . escapeshellarg($scriptPath)
             . ' --file ' . escapeshellarg($tmpPath)
             . ' --filename ' . escapeshellarg($fileName)

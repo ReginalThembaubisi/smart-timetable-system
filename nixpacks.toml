@@ -22,4 +22,4 @@ cmds = [
 
 [start]
 # Run database setup/migrations before starting the PHP server
-cmd = "php scripts/database_setup_runner.php && caddy run --config Caddyfile --adapter caddyfile"
+cmd = "export PYTHON_BIN=$(which python3 || which python || true) && php scripts/database_setup_runner.php && caddy run --config Caddyfile --adapter caddyfile"
