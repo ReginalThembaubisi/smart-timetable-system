@@ -12,6 +12,9 @@
 
 require_once __DIR__ . '/../includes/api_helpers.php';
 require_once __DIR__ . '/../includes/env.php';
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+}
 
 setCORSHeaders();
 
@@ -428,8 +431,23 @@ function extractTextFromPdf(string $tmpPath): string
 {
     $text = '';
 
+    // 1) Try smalot/pdfparser (composer dependency) first.
+    // This often succeeds on PDFs where pdftotext fails.
+    if (class_exists('\Smalot\PdfParser\Parser')) {
+        try {
+            $parser = new \Smalot\PdfParser\Parser();
+            $pdf = $parser->parseFile($tmpPath);
+            $parsed = trim((string)$pdf->getText());
+            if (strlen($parsed) >= 40) {
+                $text = $parsed;
+            }
+        } catch (\Throwable $e) {
+            // Continue to other extractors.
+        }
+    }
+
     // Try pdftotext (poppler-utils) first — fast and accurate for text PDFs.
-    if (function_exists('exec')) {
+    if (strlen($text) < 40 && function_exists('exec')) {
         $escaped = escapeshellarg($tmpPath);
         $output  = [];
         exec("pdftotext -layout $escaped - 2>/dev/null", $output, $code);
