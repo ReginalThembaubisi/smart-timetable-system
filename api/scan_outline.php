@@ -606,11 +606,18 @@ function normaliseDateString(string $raw): ?string
     // "Week of 16-20 March 2026" or "16-20 March 2026"
     $weekValue = preg_replace('/^\s*week\s+of\s+/i', '', $value) ?? $value;
     if (preg_match('/^(\d{1,2})\s*-\s*(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$/i', $weekValue, $m)) {
-        $firstDay = (int)$m[1];
+        $startDay = (int)$m[1];
+        $endDay = (int)$m[2];
         $monthName = $m[3];
         $year = (int)$m[4];
-        $dt = DateTime::createFromFormat('!j M Y', "$firstDay $monthName $year")
-            ?: DateTime::createFromFormat('!j F Y', "$firstDay $monthName $year");
+        // For week ranges, store the end of range (typically Friday) as the primary date.
+        $dt = DateTime::createFromFormat('!j M Y', "$endDay $monthName $year")
+            ?: DateTime::createFromFormat('!j F Y', "$endDay $monthName $year");
+        // Fallback to start day if end day parse fails unexpectedly.
+        if (!$dt instanceof DateTime) {
+            $dt = DateTime::createFromFormat('!j M Y', "$startDay $monthName $year")
+                ?: DateTime::createFromFormat('!j F Y', "$startDay $monthName $year");
+        }
         if ($dt instanceof DateTime) {
             return $dt->format('Y-m-d');
         }
@@ -834,11 +841,13 @@ function extractStructuredAssessmentRows(string $text, string $moduleCode): arra
         foreach (($m[1] ?? []) as $rangeRaw) {
             $date = normaliseDateString((string)$rangeRaw);
             if ($date === null) continue;
-            $key = strtolower($title . '|' . $date);
+            $rangeLabel = trim((string)$rangeRaw);
+            $displayTitle = $title . ' (Week of ' . $rangeLabel . ')';
+            $key = strtolower($displayTitle . '|' . $date);
             if (isset($seen[$key])) continue;
             $seen[$key] = true;
             $events[] = [
-                'title' => $title,
+                'title' => $displayTitle,
                 'date' => $date,
                 'type' => $type,
                 'moduleCode' => $moduleCode,
