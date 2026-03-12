@@ -85,8 +85,10 @@ $syllabusText = mb_substr($syllabusText, 0, 60000);
 // Upload flow should not depend on noisy AI JSON output.
 if ($isUploadedDocument) {
     $pythonEvents = extractEventsWithPython($uploadedFileTmp, $uploadedFileName, $moduleCode) ?? [];
-    $heuristicEvents = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
-    $deterministic = mergeEventLists($pythonEvents, $heuristicEvents);
+    $deterministic = $pythonEvents;
+    if (empty($deterministic)) {
+        $deterministic = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
+    }
     if (!empty($deterministic)) {
         sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully');
     }
