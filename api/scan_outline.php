@@ -641,43 +641,41 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
         $looksLikeAssessment = hasAssessmentKeyword($line);
         if (!$looksLikeAssessment) continue;
 
-        $matchedDate = null;
+        $dateMatches = [];
         foreach ($datePatterns as $pattern) {
-            if (preg_match($pattern, $line, $m)) {
-                $matchedDate = $m[0];
-                break;
+            if (preg_match_all($pattern, $line, $m)) {
+                foreach (($m[0] ?? []) as $hit) {
+                    $dateMatches[] = $hit;
+                }
             }
         }
-        if ($matchedDate === null) continue;
+        if (empty($dateMatches)) continue;
 
-        $dateStr = normaliseDateString($matchedDate);
-        if ($dateStr === null) continue;
+        $context = $line;
+        if ($index > 0) $context = trim($lines[$index - 1] . ' ' . $context);
+        if ($index + 1 < count($lines)) $context = trim($context . ' ' . $lines[$index + 1]);
 
-        $type = normaliseType($line);
-        $title = trim(str_replace($matchedDate, '', $line));
-        $title = trim(preg_replace('/\s+/', ' ', $title) ?? $title);
-        if (strlen($title) > 120) {
-            $title = substr($title, 0, 117) . '...';
+        foreach (array_values(array_unique($dateMatches)) as $matchedDate) {
+            $dateStr = normaliseDateString($matchedDate);
+            if ($dateStr === null) continue;
+
+            $title = inferTitleForDate($line, $matchedDate, $context);
+            $type = normaliseType($title . ' ' . $context);
+
+            $key = strtolower($title . '|' . $dateStr);
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+
+            $results[] = [
+                'title' => $title,
+                'date' => $dateStr,
+                'type' => $type,
+                'moduleCode' => $moduleCode,
+                'time' => extractTimeFromLine($context),
+                'venue' => null,
+                'isReminderSet' => false,
+            ];
         }
-        if ($title === '' || isLikelyGibberish($title)) {
-            $title = $type . ' event';
-        }
-
-        $key = strtolower($title . '|' . $dateStr);
-        if (isset($seen[$key])) continue;
-        $seen[$key] = true;
-
-        $time = extractTimeFromLine($line);
-
-        $results[] = [
-            'title' => $title,
-            'date' => $dateStr,
-            'type' => $type,
-            'moduleCode' => $moduleCode,
-            'time' => $time,
-            'venue' => null,
-            'isReminderSet' => false,
-        ];
     }
 
     // Second pass: if nothing found, extract any recognisable date lines.
@@ -688,51 +686,41 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
             $line = trim($line);
             if ($line === '' || strlen($line) < 3) continue;
 
-            $matchedDate = null;
+            $matchedDates = [];
             foreach ($datePatterns as $pattern) {
-                if (preg_match($pattern, $line, $m)) {
-                    $matchedDate = $m[0];
-                    break;
+                if (preg_match_all($pattern, $line, $m)) {
+                    foreach (($m[0] ?? []) as $hit) {
+                        $matchedDates[] = $hit;
+                    }
                 }
             }
-            if ($matchedDate === null) continue;
-
-            $dateStr = normaliseDateString($matchedDate);
-            if ($dateStr === null) continue;
+            if (empty($matchedDates)) continue;
 
             $context = $line;
             if ($index > 0) $context .= ' ' . trim($lines[$index - 1] ?? '');
             if ($index + 1 < $lineCount) $context .= ' ' . trim($lines[$index + 1] ?? '');
             if (!hasAssessmentKeyword($context)) continue;
 
-            $title = trim(str_replace($matchedDate, '', $line));
-            if ($title === '' && $index > 0) {
-                $title = cleanEventTitle(trim($lines[$index - 1] ?? ''));
-            }
-            if ($title === '' && $index + 1 < $lineCount) {
-                $title = cleanEventTitle(trim($lines[$index + 1] ?? ''));
-            }
-            if ($title === '' || isLikelyGibberish($title)) {
-                $title = 'Important date';
-            }
-            if (strlen($title) > 120) {
-                $title = substr($title, 0, 117) . '...';
-            }
+            foreach (array_values(array_unique($matchedDates)) as $matchedDate) {
+                $dateStr = normaliseDateString($matchedDate);
+                if ($dateStr === null) continue;
 
-            $type = normaliseType($title . ' ' . $line);
-            $key = strtolower($title . '|' . $dateStr);
-            if (isset($seen[$key])) continue;
-            $seen[$key] = true;
+                $title = inferTitleForDate($line, $matchedDate, $context);
+                $type = normaliseType($title . ' ' . $context);
+                $key = strtolower($title . '|' . $dateStr);
+                if (isset($seen[$key])) continue;
+                $seen[$key] = true;
 
-            $results[] = [
-                'title' => $title,
-                'date' => $dateStr,
-                'type' => $type,
-                'moduleCode' => $moduleCode,
-                'time' => extractTimeFromLine($line),
-                'venue' => null,
-                'isReminderSet' => false,
-            ];
+                $results[] = [
+                    'title' => $title,
+                    'date' => $dateStr,
+                    'type' => $type,
+                    'moduleCode' => $moduleCode,
+                    'time' => extractTimeFromLine($context),
+                    'venue' => null,
+                    'isReminderSet' => false,
+                ];
+            }
         }
     }
 
@@ -753,6 +741,25 @@ function extractTimeFromLine(string $line): ?string
         return sprintf('%02d:%02d', $hour, $min);
     }
     return null;
+}
+
+function inferTitleForDate(string $line, string $matchedDate, string $context): string
+{
+    $pattern = '/(sick\s*test|semester\s*test\s*[0-9il]*|class\s*test\s*[0-9il]*|test\s*[0-9il]+|assignment\s*\d*|quiz(?:zes)?|project(?:\s*submission)?)/i';
+    $target = $line;
+    $pos = stripos($target, $matchedDate);
+    if ($pos !== false) {
+        $left = trim(substr($target, max(0, $pos - 90), 90));
+        if (preg_match_all($pattern, $left, $m) && !empty($m[1])) {
+            return cleanEventTitle((string)end($m[1]));
+        }
+    }
+
+    if (preg_match_all($pattern, $context, $m2) && !empty($m2[1])) {
+        return cleanEventTitle((string)end($m2[1]));
+    }
+
+    return cleanEventTitle(normaliseType($context) . ' event');
 }
 
 function hasAssessmentKeyword(string $text): bool
