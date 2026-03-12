@@ -81,12 +81,16 @@ if (strlen($syllabusText) < 10) {
 // Truncate to avoid token limits (~60 000 chars ≈ 15 000 tokens)
 $syllabusText = mb_substr($syllabusText, 0, 60000);
 
-// Prefer deterministic Python parser for uploaded files (PDF/DOCX/TXT).
+// Prefer deterministic parsers for uploaded files (PDF/DOCX/TXT).
+// Upload flow should not depend on noisy AI JSON output.
 if ($isUploadedDocument) {
-    $pythonEvents = extractEventsWithPython($uploadedFileTmp, $uploadedFileName, $moduleCode);
-    if ($pythonEvents !== null && !empty($pythonEvents)) {
-        sendJSONResponse(true, ['events' => $pythonEvents], 'Events extracted successfully');
+    $pythonEvents = extractEventsWithPython($uploadedFileTmp, $uploadedFileName, $moduleCode) ?? [];
+    $heuristicEvents = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
+    $deterministic = mergeEventLists($pythonEvents, $heuristicEvents);
+    if (!empty($deterministic)) {
+        sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully');
     }
+    sendJSONResponse(true, ['events' => []], 'No assessment dates found in uploaded document.');
 }
 
 // ── API key: prefer Groq (generous free tier), fall back to Gemini ────────────
