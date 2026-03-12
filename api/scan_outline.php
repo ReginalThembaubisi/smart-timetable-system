@@ -90,7 +90,7 @@ if ($isUploadedDocument) {
         $deterministic = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
     }
     if (!empty($deterministic)) {
-        sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully');
+        sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully [upload-parser-v2]');
     }
     sendJSONResponse(true, ['events' => []], 'No assessment dates found in uploaded document.');
 }
