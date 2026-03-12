@@ -1010,37 +1010,6 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                   const SizedBox(width: 6),
                   _buildViewToggleButton('Week', selectedView == 'Week'),
                   const SizedBox(width: 8),
-                  if (studentModules.isNotEmpty) ...[
-                    GestureDetector(
-                      onTap: _navigateToModules,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.deepPurple.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                              color: Colors.deepPurple.withValues(alpha: 0.35),
-                              width: 1),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.menu_book,
-                                color: Colors.white, size: 15),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${studentModules.length}',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
                   GlassButton(
                     onPressed: () {
                       Navigator.push(
