@@ -195,8 +195,11 @@ if (!is_array($events)) {
     $events = json_decode(trim((string)$sanitised), true);
 }
 if (!is_array($events)) {
-    // If AI output isn't parseable JSON, fail softly so the app can continue.
-    // This avoids surfacing raw garbled model output to users.
+    // If AI output isn't parseable JSON, fall back to heuristic extraction.
+    $heuristic = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
+    if (!empty($heuristic)) {
+        sendJSONResponse(true, ['events' => $heuristic], 'Events extracted with fallback parser');
+    }
     sendJSONResponse(true, ['events' => []], 'No parseable events found in the uploaded document.');
 }
 
@@ -211,9 +214,8 @@ function normaliseType(string $raw): string {
 $cleaned = [];
 foreach ($events as $ev) {
     if (!is_array($ev)) continue;
-    $dateStr = trim($ev['date'] ?? '');
-    $dt = DateTime::createFromFormat('Y-m-d', $dateStr);
-    if (!$dt || $dt->format('Y-m-d') !== $dateStr) continue;
+    $dateStr = normaliseDateString($ev['date'] ?? '');
+    if ($dateStr === null) continue;
 
     $cleaned[] = [
         'title'         => trim($ev['title'] ?? 'Untitled event') ?: 'Untitled event',
@@ -224,6 +226,10 @@ foreach ($events as $ev) {
         'venue'         => !empty($ev['venue']) ? trim($ev['venue']) : null,
         'isReminderSet' => false,
     ];
+}
+
+if (empty($cleaned)) {
+    $cleaned = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
 }
 
 sendJSONResponse(true, ['events' => $cleaned], 'Events extracted successfully');
@@ -336,4 +342,130 @@ function extractTextFromPdf(string $tmpPath): string
     }
 
     return trim($text);
+}
+
+function normaliseDateString(string $raw): ?string
+{
+    $value = trim($raw);
+    if ($value === '') return null;
+
+    // Remove ordinal suffixes: 1st, 2nd, 3rd, 4th...
+    $value = preg_replace('/\b(\d{1,2})(st|nd|rd|th)\b/i', '$1', $value) ?? $value;
+    $value = trim($value);
+
+    // Already normalised
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        return $value;
+    }
+
+    $formats = [
+        'd/m/Y', 'd-m-Y', 'd.m.Y',
+        'j/n/Y', 'j-n-Y',
+        'd/m/y', 'd-m-y',
+        'j M Y', 'j F Y', 'd M Y', 'd F Y',
+        'M j Y', 'F j Y',
+        'j M, Y', 'j F, Y', 'M j, Y', 'F j, Y',
+    ];
+
+    foreach ($formats as $fmt) {
+        $dt = DateTime::createFromFormat('!' . $fmt, $value);
+        if ($dt instanceof DateTime) {
+            return $dt->format('Y-m-d');
+        }
+    }
+
+    // Day/month without year -> assume 2026 for current academic cycle.
+    if (preg_match('/^(\d{1,2})[\/\-.](\d{1,2})$/', $value, $m)) {
+        $day = (int)$m[1];
+        $month = (int)$m[2];
+        if (checkdate($month, $day, 2026)) {
+            return sprintf('2026-%02d-%02d', $month, $day);
+        }
+    }
+    if (preg_match('/^(\d{1,2})\s+([A-Za-z]{3,9})$/', $value, $m)) {
+        $dt = DateTime::createFromFormat('!j M Y', "{$m[1]} {$m[2]} 2026")
+            ?: DateTime::createFromFormat('!j F Y', "{$m[1]} {$m[2]} 2026");
+        if ($dt instanceof DateTime) {
+            return $dt->format('Y-m-d');
+        }
+    }
+
+    // Final fallback via strtotime for uncommon, but valid date strings.
+    $ts = strtotime($value);
+    if ($ts !== false) {
+        return date('Y-m-d', $ts);
+    }
+
+    return null;
+}
+
+function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
+{
+    $lines = preg_split('/\R+/', $text) ?: [];
+    $results = [];
+    $seen = [];
+
+    $datePatterns = [
+        '/\b\d{4}-\d{2}-\d{2}\b/',
+        '/\b\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?\b/',
+        '/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\b(?:,?\s*\d{4})?/i',
+        '/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?\b(?:,?\s*\d{4})?/i',
+    ];
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || strlen($line) < 6) continue;
+
+        $lower = strtolower($line);
+        $looksLikeAssessment = str_contains($lower, 'test')
+            || str_contains($lower, 'exam')
+            || str_contains($lower, 'assignment')
+            || str_contains($lower, 'practical')
+            || str_contains($lower, 'project')
+            || str_contains($lower, 'submission')
+            || str_contains($lower, 'due');
+        if (!$looksLikeAssessment) continue;
+
+        $matchedDate = null;
+        foreach ($datePatterns as $pattern) {
+            if (preg_match($pattern, $line, $m)) {
+                $matchedDate = $m[0];
+                break;
+            }
+        }
+        if ($matchedDate === null) continue;
+
+        $dateStr = normaliseDateString($matchedDate);
+        if ($dateStr === null) continue;
+
+        $type = normaliseType($line);
+        $title = trim(preg_replace('/\s+/', ' ', $line) ?? $line);
+        if (strlen($title) > 120) {
+            $title = substr($title, 0, 117) . '...';
+        }
+        if ($title === '') {
+            $title = $type . ' event';
+        }
+
+        $key = strtolower($title . '|' . $dateStr);
+        if (isset($seen[$key])) continue;
+        $seen[$key] = true;
+
+        $time = null;
+        if (preg_match('/\b([01]?\d|2[0-3]):([0-5]\d)\b/', $line, $tm)) {
+            $time = sprintf('%02d:%02d', (int)$tm[1], (int)$tm[2]);
+        }
+
+        $results[] = [
+            'title' => $title,
+            'date' => $dateStr,
+            'type' => $type,
+            'moduleCode' => $moduleCode,
+            'time' => $time,
+            'venue' => null,
+            'isReminderSet' => false,
+        ];
+    }
+
+    return $results;
 }
