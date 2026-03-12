@@ -404,12 +404,13 @@ function extractTextFromPdfUsingOcr(string $tmpPath, int $maxPages = 8): string
     $textParts = [];
 
     foreach ($images as $imagePath) {
-        $ocrOut = [];
         $escapedImage = escapeshellarg($imagePath);
-        exec("tesseract $escapedImage stdout -l eng --oem 1 --psm 11 2>/dev/null", $ocrOut, $ocrCode);
-        if ($ocrCode === 0 && !empty($ocrOut)) {
-            $textParts[] = implode("\n", $ocrOut);
-        }
+        $ocrTextA = runTesseractToText($escapedImage, '--oem 1 --psm 6');
+        $ocrTextB = runTesseractToText($escapedImage, '--oem 1 --psm 11');
+        $scoreA = textQualityScore($ocrTextA);
+        $scoreB = textQualityScore($ocrTextB);
+        $best = $scoreA >= $scoreB ? $ocrTextA : $ocrTextB;
+        if (trim($best) !== '') $textParts[] = $best;
     }
 
     cleanupDirectory($tmpDir);
@@ -426,6 +427,42 @@ function cleanupDirectory(string $dir): void
         }
     }
     @rmdir($dir);
+}
+
+function runTesseractToText(string $escapedImagePath, string $args): string
+{
+    $ocrOut = [];
+    exec("tesseract $escapedImagePath stdout -l eng $args 2>/dev/null", $ocrOut, $ocrCode);
+    if ($ocrCode !== 0 || empty($ocrOut)) return '';
+    return trim(implode("\n", $ocrOut));
+}
+
+function textQualityScore(string $text): float
+{
+    $s = trim($text);
+    if ($s === '') return -1000.0;
+
+    $len = strlen($s);
+    $alpha = preg_match_all('/[A-Za-z]/', $s);
+    $digits = preg_match_all('/\d/', $s);
+    $symbols = preg_match_all('/[^A-Za-z0-9\s]/', $s);
+    $words = preg_match_all('/[A-Za-z]{3,}/', $s);
+    $dateLike = preg_match_all('/\b(\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?|\d{4}-\d{2}-\d{2})\b/', $s);
+    $months = preg_match_all('/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\b/i', $s);
+    $keywords = preg_match_all('/\b(test|exam|assignment|practical|quiz|project|week|assessment|submission|due)\b/i', $s);
+
+    $alnumRatio = ($alpha + $digits) / max(1, $len);
+    $symbolRatio = $symbols / max(1, $len);
+
+    $score = 0.0;
+    $score += $words * 0.8;
+    $score += $dateLike * 2.5;
+    $score += $months * 2.0;
+    $score += $keywords * 2.0;
+    $score += $alnumRatio * 25.0;
+    $score -= $symbolRatio * 40.0;
+
+    return $score;
 }
 
 function normaliseDateString(string $raw): ?string
@@ -648,7 +685,7 @@ function cleanEventTitle(string $raw): string
     $title = preg_replace('/\s+/', ' ', $title) ?? $title;
     $title = trim($title, " \t\n\r\0\x0B-:|");
 
-    if ($title === '') return 'Untitled event';
+    if ($title === '' || isLikelyGibberish($title)) return 'Untitled event';
     if (strlen($title) > 120) {
         $title = substr($title, 0, 117) . '...';
     }
@@ -664,10 +701,11 @@ function isLikelyGibberish(string $value): bool
     $symbolCount = preg_match_all('/[^A-Za-z0-9\s]/', $s);
     $alnumCount = preg_match_all('/[A-Za-z0-9]/', $s);
     if ($alnumCount === 0) return true;
-    if ($symbolCount > ($alnumCount * 0.6)) return true;
+    if ($symbolCount > ($alnumCount * 0.35)) return true;
 
     // Long runs of punctuation are almost always corruption.
     if (preg_match('/[^\w\s]{4,}/', $s)) return true;
+    if (preg_match('/[?]{2,}/', $s)) return true;
 
     // If it has no vowels and is long, it's likely garbage tokens.
     if (strlen($s) > 12 && !preg_match('/[AEIOUaeiou]/', $s)) return true;
