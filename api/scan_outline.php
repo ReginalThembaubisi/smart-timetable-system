@@ -220,7 +220,7 @@ foreach ($events as $ev) {
     if ($dateStr === null) continue;
 
     $cleaned[] = [
-        'title'         => trim($ev['title'] ?? 'Untitled event') ?: 'Untitled event',
+        'title'         => cleanEventTitle($ev['title'] ?? 'Untitled event'),
         'date'          => $dateStr,
         'type'          => normaliseType($ev['type'] ?? ''),
         'moduleCode'    => $moduleCode,
@@ -230,8 +230,22 @@ foreach ($events as $ev) {
     ];
 }
 
-if (empty($cleaned)) {
+// If AI output is mostly gibberish/noise, rely on deterministic fallback extraction.
+$usableCount = 0;
+foreach ($cleaned as $item) {
+    if (!isLikelyGibberish($item['title'])) {
+        $usableCount++;
+    }
+}
+if (empty($cleaned) || $usableCount === 0) {
     $cleaned = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
+} else {
+    $cleaned = array_values(array_filter($cleaned, static function ($item) {
+        return !isLikelyGibberish($item['title']);
+    }));
+    if (empty($cleaned)) {
+        $cleaned = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
+    }
 }
 
 sendJSONResponse(true, ['events' => $cleaned], 'Events extracted successfully');
@@ -509,6 +523,7 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
 
     foreach ($lines as $index => $line) {
         $line = trim($line);
+        $line = cleanEventTitle($line);
         if ($line === '' || strlen($line) < 6) continue;
 
         $lower = strtolower($line);
@@ -581,10 +596,10 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
 
             $title = trim(str_replace($matchedDate, '', $line));
             if ($title === '' && $index > 0) {
-                $title = trim($lines[$index - 1] ?? '');
+                $title = cleanEventTitle(trim($lines[$index - 1] ?? ''));
             }
             if ($title === '' && $index + 1 < $lineCount) {
-                $title = trim($lines[$index + 1] ?? '');
+                $title = cleanEventTitle(trim($lines[$index + 1] ?? ''));
             }
             if ($title === '') {
                 $title = 'Important date';
@@ -627,4 +642,42 @@ function extractTimeFromLine(string $line): ?string
         return sprintf('%02d:%02d', $hour, $min);
     }
     return null;
+}
+
+function cleanEventTitle(string $raw): string
+{
+    $title = trim($raw);
+    if ($title === '') return 'Untitled event';
+
+    // Remove replacement chars and non-printable noise from OCR/LLM output.
+    $title = str_replace(["\xEF\xBF\xBD", '�'], ' ', $title);
+    $title = preg_replace('/[^\x20-\x7E]/', ' ', $title) ?? $title;
+    $title = preg_replace('/\s+/', ' ', $title) ?? $title;
+    $title = trim($title, " \t\n\r\0\x0B-:|");
+
+    if ($title === '') return 'Untitled event';
+    if (strlen($title) > 120) {
+        $title = substr($title, 0, 117) . '...';
+    }
+    return $title;
+}
+
+function isLikelyGibberish(string $value): bool
+{
+    $s = trim($value);
+    if ($s === '' || strlen($s) < 4) return true;
+
+    // Too many symbols/punctuation vs letters/digits usually indicates OCR noise.
+    $symbolCount = preg_match_all('/[^A-Za-z0-9\s]/', $s);
+    $alnumCount = preg_match_all('/[A-Za-z0-9]/', $s);
+    if ($alnumCount === 0) return true;
+    if ($symbolCount > ($alnumCount * 0.6)) return true;
+
+    // Long runs of punctuation are almost always corruption.
+    if (preg_match('/[^\w\s]{4,}/', $s)) return true;
+
+    // If it has no vowels and is long, it's likely garbage tokens.
+    if (strlen($s) > 12 && !preg_match('/[AEIOUaeiou]/', $s)) return true;
+
+    return false;
 }
