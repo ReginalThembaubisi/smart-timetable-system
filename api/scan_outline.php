@@ -188,8 +188,16 @@ if ($start !== false && $end !== false && $end > $start) {
 
 $events = json_decode($jsonStr, true);
 if (!is_array($events)) {
-    // Show exactly what the AI returned so we can debug
-    sendJSONResponse(false, null, 'AI parse failed. Response was: ' . substr($rawResult, 0, 600), 502);
+    // Try one more pass by stripping non-printable chars that sometimes appear
+    // in OCR-derived model output and can break JSON decoding.
+    $sanitised = preg_replace('/[^\x09\x0A\x0D\x20-\x7E]/', ' ', $jsonStr);
+    $sanitised = preg_replace('/\s{2,}/', ' ', $sanitised);
+    $events = json_decode(trim((string)$sanitised), true);
+}
+if (!is_array($events)) {
+    // If AI output isn't parseable JSON, fail softly so the app can continue.
+    // This avoids surfacing raw garbled model output to users.
+    sendJSONResponse(true, ['events' => []], 'No parseable events found in the uploaded document.');
 }
 
 function normaliseType(string $raw): string {
