@@ -626,6 +626,16 @@ function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
     $results = [];
     $seen = [];
 
+    // Pass 0: deterministic extraction for common assessment-table rows.
+    // Example: "Test 1 Week of 16-20 March 2026"
+    $structured = extractStructuredAssessmentRows($text, $moduleCode);
+    foreach ($structured as $ev) {
+        $key = strtolower(($ev['title'] ?? '') . '|' . ($ev['date'] ?? ''));
+        if ($key === '' || isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $results[] = $ev;
+    }
+
     foreach ($lines as $index => $line) {
         $line = trim($line);
         if ($line === '' || strlen($line) < 6) continue;
@@ -770,6 +780,51 @@ function extractDateCandidatesFromText(string $text): array
     }
 
     return array_values(array_unique($candidates));
+}
+
+function extractStructuredAssessmentRows(string $text, string $moduleCode): array
+{
+    $events = [];
+    $seen = [];
+    $haystack = normaliseOcrNoise($text);
+
+    $patterns = [
+        // Test 1 / Test l / Test I
+        ['/(?:\bsemester\s+)?\btest\s*[1il]\b.{0,80}?\b(?:week\s+of\s+)?(\d{1,2}\s*-\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/i', 'Test 1', 'Test'],
+        // Test 2
+        ['/(?:\bsemester\s+)?\btest\s*2\b.{0,80}?\b(?:week\s+of\s+)?(\d{1,2}\s*-\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/i', 'Test 2', 'Test'],
+        // Sick test
+        ['/\bsick\s+test\b.{0,120}?\b(?:week\s+of\s+)?(\d{1,2}\s*-\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/i', 'Sick test', 'Test'],
+    ];
+
+    foreach ($patterns as [$regex, $title, $type]) {
+        if (!preg_match_all($regex, $haystack, $m)) continue;
+        foreach (($m[1] ?? []) as $rangeRaw) {
+            $date = normaliseDateString((string)$rangeRaw);
+            if ($date === null) continue;
+            $key = strtolower($title . '|' . $date);
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+            $events[] = [
+                'title' => $title,
+                'date' => $date,
+                'type' => $type,
+                'moduleCode' => $moduleCode,
+                'time' => null,
+                'venue' => null,
+                'isReminderSet' => false,
+            ];
+        }
+    }
+
+    usort($events, static function ($a, $b) {
+        $ad = (string)($a['date'] ?? '');
+        $bd = (string)($b['date'] ?? '');
+        if ($ad !== $bd) return strcmp($ad, $bd);
+        return strcmp((string)($a['title'] ?? ''), (string)($b['title'] ?? ''));
+    });
+
+    return $events;
 }
 
 function normaliseOcrNoise(string $text): string
