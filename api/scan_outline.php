@@ -22,6 +22,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // ── Read input (file upload OR JSON text) ─────────────────────────────────────
 $moduleCode    = '';
 $syllabusText  = '';
+$isUploadedDocument = false;
+$uploadedFileTmp = '';
+$uploadedFileName = '';
 
 $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
 
@@ -47,6 +50,9 @@ if (str_contains($contentType, 'multipart/form-data')) {
 
     // Extract text from supported document formats.
     $syllabusText = extractTextFromUploadedFile($fileTmp, $fileName, $fileType);
+    $isUploadedDocument = true;
+    $uploadedFileTmp = $fileTmp;
+    $uploadedFileName = $fileName;
 
 } else {
     // ── JSON TEXT path ────────────────────────────────────────────────────────
@@ -74,6 +80,14 @@ if (strlen($syllabusText) < 10) {
 
 // Truncate to avoid token limits (~60 000 chars ≈ 15 000 tokens)
 $syllabusText = mb_substr($syllabusText, 0, 60000);
+
+// Prefer deterministic Python parser for uploaded files (PDF/DOCX/TXT).
+if ($isUploadedDocument) {
+    $pythonEvents = extractEventsWithPython($uploadedFileTmp, $uploadedFileName, $moduleCode);
+    if ($pythonEvents !== null && !empty($pythonEvents)) {
+        sendJSONResponse(true, ['events' => $pythonEvents], 'Events extracted successfully');
+    }
+}
 
 // ── API key: prefer Groq (generous free tier), fall back to Gemini ────────────
 $groqKey   = getenv('GROQ_API_KEY');
@@ -275,6 +289,66 @@ function extractTextFromUploadedFile(string $tmpPath, string $fileName, string $
 
     // Default to PDF-style extraction (also safe fallback for unknown types).
     return extractTextFromPdf($tmpPath);
+}
+
+function extractEventsWithPython(string $tmpPath, string $fileName, string $moduleCode): ?array
+{
+    if (!function_exists('exec')) {
+        return null;
+    }
+
+    $scriptPath = realpath(__DIR__ . '/../extractor/extract_events.py');
+    if ($scriptPath === false || !file_exists($scriptPath)) {
+        return null;
+    }
+
+    $output = [];
+    $code = 1;
+    foreach (['python3', 'python'] as $pythonBin) {
+        $cmd = escapeshellcmd($pythonBin) . ' ' . escapeshellarg($scriptPath)
+            . ' --file ' . escapeshellarg($tmpPath)
+            . ' --filename ' . escapeshellarg($fileName)
+            . ' --module ' . escapeshellarg($moduleCode);
+
+        $output = [];
+        exec($cmd . ' 2>/dev/null', $output, $code);
+        if ($code === 0 && !empty($output)) {
+            break;
+        }
+        // Windows-compatible stderr suppression retry.
+        exec($cmd . ' 2>NUL', $output, $code);
+        if ($code === 0 && !empty($output)) {
+            break;
+        }
+    }
+
+    if ($code !== 0 || empty($output)) {
+        return null;
+    }
+
+    $decoded = json_decode(implode("\n", $output), true);
+    if (!is_array($decoded) || !isset($decoded['events']) || !is_array($decoded['events'])) {
+        return null;
+    }
+
+    $events = [];
+    foreach ($decoded['events'] as $ev) {
+        if (!is_array($ev)) continue;
+        $date = normaliseDateString((string)($ev['date'] ?? ''));
+        if ($date === null) continue;
+
+        $events[] = [
+            'title'         => cleanEventTitle((string)($ev['title'] ?? 'Untitled event')),
+            'date'          => $date,
+            'type'          => normaliseType((string)($ev['type'] ?? '')),
+            'moduleCode'    => $moduleCode,
+            'time'          => !empty($ev['time']) ? trim((string)$ev['time']) : null,
+            'venue'         => !empty($ev['venue']) ? trim((string)$ev['venue']) : null,
+            'isReminderSet' => false,
+        ];
+    }
+
+    return $events;
 }
 
 function extractTextFromDocx(string $tmpPath): string
