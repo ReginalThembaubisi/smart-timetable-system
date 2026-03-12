@@ -196,7 +196,7 @@ class _EditSessionScreenState extends State<EditSessionScreen> {
                  },
                 validator: (value) {
                   if (value == null) {
-                    return 'Please select a module';
+                    return 'Select a module to continue.';
                   }
                   return null;
                 },
@@ -221,7 +221,7 @@ class _EditSessionScreenState extends State<EditSessionScreen> {
                     style: const TextStyle(color: Colors.white),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Please enter a session title';
+                        return 'Enter a session title to continue.';
                       }
                       return null;
                     },
@@ -550,7 +550,7 @@ class _EditSessionScreenState extends State<EditSessionScreen> {
         // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error updating session: $e'),
+            content: Text('Could not update the session. Please try again.'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -640,7 +640,7 @@ class _EditSessionScreenState extends State<EditSessionScreen> {
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error deleting session: $e'),
+          content: Text('Could not delete the session. Please try again.'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 3),
         ),

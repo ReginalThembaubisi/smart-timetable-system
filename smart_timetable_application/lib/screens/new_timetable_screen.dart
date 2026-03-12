@@ -420,7 +420,7 @@ class _NewTimetableScreenState extends State<NewTimetableScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Error loading timetable',
+              'Could not load timetable',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -429,7 +429,7 @@ class _NewTimetableScreenState extends State<NewTimetableScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              errorMessage ?? 'Unknown error occurred',
+              '${errorMessage ?? 'Unknown error occurred'}\nCheck your internet connection, then tap Retry.',
               style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
@@ -689,7 +689,7 @@ class _NewTimetableScreenState extends State<NewTimetableScreen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'No timetable data loaded',
+                'No timetable data yet',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -698,7 +698,7 @@ class _NewTimetableScreenState extends State<NewTimetableScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Timetable data keys: ${timetableData.keys}',
+                'Pull down or tap Reload Data to fetch your latest classes.',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 14,
@@ -911,7 +911,7 @@ class _NewTimetableScreenState extends State<NewTimetableScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Enjoy your free day!',
+              'Try another day above, or use this time to plan a study session.',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.7),
                 fontSize: 14,
@@ -947,7 +947,7 @@ class _NewTimetableScreenState extends State<NewTimetableScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Try searching for a different term',
+                'Try a different module name, venue, lecturer, or day.',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 14,

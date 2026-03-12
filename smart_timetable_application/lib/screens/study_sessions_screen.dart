@@ -1192,7 +1192,7 @@ class _StudySessionsScreenState extends State<StudySessionsScreen> {
       await StudySessionService.rescheduleAllNotifications(widget.student.studentId);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('All notifications rescheduled!'),
+          content: Text('Notifications updated for all study sessions.'),
           backgroundColor: Colors.green,
           duration: Duration(seconds: 2),
         ),
@@ -1200,7 +1200,7 @@ class _StudySessionsScreenState extends State<StudySessionsScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Could not update notifications. Please try again.'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 2),
         ),
@@ -1214,7 +1214,7 @@ class _StudySessionsScreenState extends State<StudySessionsScreen> {
       await StudySessionService.cancelAllNotifications(widget.student.studentId);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('All notifications cancelled!'),
+          content: Text('All study session notifications cancelled.'),
           backgroundColor: Colors.orange,
           duration: Duration(seconds: 2),
         ),
@@ -1222,7 +1222,7 @@ class _StudySessionsScreenState extends State<StudySessionsScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Could not cancel notifications. Please try again.'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 2),
         ),
@@ -1236,7 +1236,7 @@ class _StudySessionsScreenState extends State<StudySessionsScreen> {
       NotificationService.showTestNotification(context);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Test notification sent!'),
+          content: Text('Test notification sent successfully.'),
           backgroundColor: Colors.green,
           duration: Duration(seconds: 2),
         ),
@@ -1244,7 +1244,7 @@ class _StudySessionsScreenState extends State<StudySessionsScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Could not send test notification. Please try again.'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 2),
         ),

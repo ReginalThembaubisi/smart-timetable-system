@@ -107,7 +107,7 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
             ),
             SizedBox(height: 16),
             const Text(
-              'Error loading study plan',
+              'Could not load study plan',
               style: TextStyle(
                 fontSize: 18,
                 color: Colors.red,
@@ -176,7 +176,7 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
                 padding: EdgeInsets.all(16),
                 child: Center(
                   child: Text(
-                    'No modules assigned yet. Contact your administrator.',
+                    'No modules assigned yet. Ask your administrator to assign modules, then refresh this page.',
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.grey,

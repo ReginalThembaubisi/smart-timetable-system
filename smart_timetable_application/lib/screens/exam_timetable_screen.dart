@@ -70,7 +70,7 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
           });
           return;
         }
-        throw Exception('Student ID not found. Please log in again.');
+        throw Exception('Student account not found. Please sign in again.');
       }
       
       final studentData = jsonDecode(studentJson);
@@ -79,7 +79,7 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
       studentId ??= studentData['studentId']?.toString();
       
       if (studentId == null) {
-        throw Exception('Student ID not found. Please log in again.');
+        throw Exception('Student account not found. Please sign in again.');
       }
 
       // Load exam timetables and notifications in parallel
@@ -96,14 +96,14 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
     } catch (e) {
       setState(() {
         // Show more user-friendly error messages
-        if (e.toString().contains('Student ID not found')) {
-          _error = 'Please log in again to access exam timetables.';
+        if (e.toString().contains('Student account not found')) {
+          _error = 'Please sign in again to view your exam timetable.';
         } else if (e.toString().contains('No modules found')) {
-          _error = 'No exam timetables available for your registered modules yet.';
+          _error = 'No exam timetable is available for your registered modules yet.';
         } else if (e.toString().contains('No exam timetable available')) {
-          _error = 'No exam timetables have been published yet.';
+          _error = 'Exam timetables have not been published yet. Please check again later.';
         } else {
-          _error = 'Unable to load exam data. Please check your connection and try again.';
+          _error = 'We could not load exam data. Check your connection and tap Retry.';
         }
         _isLoading = false;
       });
@@ -338,7 +338,7 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
     return Center(
       child: ErrorState(
         title: 'Error Loading Exam Data',
-        message: _error ?? 'Something went wrong. Please try again.',
+        message: _error ?? 'Something went wrong. Please tap Retry.',
         onRetry: _loadExamData,
         retryText: 'Retry',
       ),
@@ -454,7 +454,7 @@ class _ExamTimetableScreenState extends State<ExamTimetableScreen>
               const Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
-                  'No exams scheduled for your modules',
+                  'No exams scheduled for your modules yet. Refresh later or check with your department.',
                   style: TextStyle(
                     color: Colors.white38,
                     fontStyle: FontStyle.italic,

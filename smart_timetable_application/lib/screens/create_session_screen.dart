@@ -307,7 +307,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                         return 'Modules are still loading';
                       }
                       if (value == null) {
-                        return 'Please select a module';
+                        return 'Select a module to continue.';
                       }
                       return null;
                     },
@@ -332,7 +332,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                     style: const TextStyle(color: Colors.white),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Please enter a session title';
+                        return 'Enter a session title to continue.';
                       }
                       return null;
                     },
@@ -683,7 +683,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
         // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating session: $e'),
+            content: Text('Could not create the session. Please try again.'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),

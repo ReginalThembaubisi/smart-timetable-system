@@ -9,7 +9,7 @@ class OutlineService {
   static const String _modelName = 'gemini-1.5-flash';
 
   static const String _prompt = """
-You are an academic assistant for a university student. Your goal is to find all important assessment dates from the attached syllabus/outline.
+You are an academic assistant for a university student. Your goal is to find all important assessment dates from the attached module handout.
 
 Extract events such as:
 - Tests (Test 1, Semester Test, Class Test, etc.)
@@ -29,13 +29,13 @@ Example: [{"title": "Test 1", "date": "2026-03-20", "type": "Test", "time": "14:
 If no events are found, return an empty list: []
 """;
 
-  /// Sends syllabus text to the PHP backend, which calls Gemini server-side.
+  /// Sends module handout text to the PHP backend, which calls Gemini server-side.
   static Future<List<OutlineEvent>> extractEventsFromText(
     String text,
     String moduleCode,
   ) async {
     if (text.trim().isEmpty) {
-      throw Exception('No text provided. Please paste your syllabus content.');
+      throw Exception('No text provided. Please paste your module handout content.');
     }
     return _postToScanEndpoint(moduleCode, text: text);
   }
@@ -90,13 +90,13 @@ If no events are found, return an empty list: []
 
   static List<OutlineEvent> _parseResponse(String responseBody) {
     if (responseBody.trim().isEmpty) {
-      throw Exception('Server returned an empty response. Please try again.');
+      throw Exception('We could not read the server response. Please try again in a moment.');
     }
     Map<String, dynamic> body;
     try {
       body = jsonDecode(responseBody) as Map<String, dynamic>;
     } catch (_) {
-      throw Exception('Server error. Please try again in a moment.');
+      throw Exception('The server returned an unexpected response. Please try again.');
     }
     if (body['success'] != true) {
       throw Exception(body['message'] ?? 'Server error during scan.');

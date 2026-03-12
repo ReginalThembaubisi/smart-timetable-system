@@ -415,8 +415,8 @@ class _TimetableScreenState extends State<TimetableScreen>
             const SizedBox(height: 16),
             Text(
               timetableData.isEmpty
-                  ? 'No schedule available yet'
-                  : 'No classes on $selectedDay! 🎉',
+                  ? 'No timetable loaded yet'
+                  : 'No classes on $selectedDay',
               style: const TextStyle(
                 fontSize: 18,
                 color: Colors.white70,
@@ -425,7 +425,7 @@ class _TimetableScreenState extends State<TimetableScreen>
             ),
             const SizedBox(height: 8),
             const Text(
-              'Enjoy your free day or plan some study time.',
+              'Tap Retry to refresh, choose another day, or plan a study session.',
               style: TextStyle(fontSize: 13, color: Colors.white38),
               textAlign: TextAlign.center,
             ),

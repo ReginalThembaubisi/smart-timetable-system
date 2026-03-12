@@ -109,10 +109,10 @@ class EmptyTimetableState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return EmptyState(
-      title: 'No Classes Today',
-      subtitle: 'You have no classes scheduled for today. Enjoy your free time or catch up on your studies!',
+      title: 'No Classes Scheduled Today',
+      subtitle: 'You have no classes today. Use this time to revise, create a study session, or check tomorrow\'s timetable.',
       icon: Icons.schedule,
-      actionText: 'Refresh',
+      actionText: 'Refresh Data',
       onAction: onRefresh,
       iconColor: Colors.blue,
     );
@@ -131,7 +131,7 @@ class EmptyStudySessionsState extends StatelessWidget {
   Widget build(BuildContext context) {
     return EmptyState(
       title: 'No Study Sessions',
-      subtitle: 'You haven\'t created any study sessions yet. Start by creating your first session to track your study time.',
+      subtitle: 'You have not created study sessions yet. Tap "Create Session" to plan your first focused study block.',
       icon: Icons.school,
       actionText: 'Create Session',
       onAction: onCreateSession,
@@ -151,10 +151,10 @@ class EmptyExamState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return EmptyState(
-      title: 'No Exam Timetables',
-      subtitle: 'No exam timetables are available yet. Check back later or contact your department for updates.',
+      title: 'No Exam Timetable Yet',
+      subtitle: 'Your exam timetable is not available yet. Refresh later or check with your department for release dates.',
       icon: Icons.quiz,
-      actionText: 'Refresh',
+      actionText: 'Refresh Data',
       onAction: onRefresh,
       iconColor: Colors.orange,
     );
@@ -173,7 +173,7 @@ class EmptySearchState extends StatelessWidget {
   Widget build(BuildContext context) {
     return EmptyState(
       title: 'No Results Found',
-      subtitle: 'No results found for "$searchTerm". Try adjusting your search terms or check your spelling.',
+      subtitle: 'No results found for "$searchTerm". Try another keyword, fewer words, or check spelling.',
       icon: Icons.search_off,
       iconColor: Colors.grey,
     );
@@ -187,7 +187,7 @@ class EmptyNotificationsState extends StatelessWidget {
   Widget build(BuildContext context) {
     return EmptyState(
       title: 'No Notifications',
-      subtitle: 'You\'re all caught up! No new notifications at the moment.',
+      subtitle: 'You are all caught up. New reminders and updates will appear here automatically.',
       icon: Icons.notifications_none,
       iconColor: Colors.blue,
     );

@@ -43,7 +43,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
   /// Upload a document file directly — PHP extracts the text and calls AI.
   Future<void> _uploadFile() async {
     if (_selectedModule == null) {
-      _snack('Please select a module first.');
+      _snack('Select a module first, then upload your module handout.');
       return;
     }
 
@@ -71,7 +71,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       });
 
       if (events.isEmpty) {
-        _snack('No dates found. Try pasting the text instead.');
+        _snack('No deadlines found in that file. Try a clearer handout file or paste the handout text below.');
       }
     } catch (e) {
       if (!mounted) return;
@@ -81,18 +81,18 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       });
       final msg = e.toString();
       if (msg.toLowerCase().contains('cancel')) return;
-      _snack('Upload failed: $msg', seconds: 8);
+      _snack('Upload failed: $msg. You can try again or paste handout text manually.', seconds: 8);
     }
   }
 
   Future<void> _analyze() async {
     if (_selectedModule == null) {
-      _snack('Please select a module first.');
+      _snack('Select a module first, then paste your module handout text.');
       return;
     }
     final text = _textController.text.trim();
     if (text.isEmpty) {
-      setState(() => _errorMessage = 'No text detected. Paste your syllabus text into the box above and try again.');
+      setState(() => _errorMessage = 'No text detected yet. Paste your module handout text above, then tap "Extract Dates with AI".');
       return;
     }
     setState(() {
@@ -114,7 +114,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
       });
 
       if (events.isEmpty) {
-        _snack('No dates found. Try adding more text from your syllabus.');
+        _snack('No deadlines found. Add more sections from your module handout (tests, assignments, exam dates) and try again.');
       }
     } catch (e) {
       if (!mounted) return;
@@ -211,7 +211,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
           ),
           const SizedBox(width: 8),
           const Text(
-            'Scan Module Outline',
+            'Scan Module Handout',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -243,7 +243,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Upload your handout (PDF/DOCX/TXT) or copy text from it and paste below',
+                    'Upload your module handout (PDF/DOCX/TXT), or copy text from it and paste below.',
                     style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ),
@@ -309,7 +309,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
               Expanded(child: Divider(color: Colors.white24)),
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 10),
-                child: Text('or paste text below',
+                child: Text('or paste handout text below',
                     style: TextStyle(color: Colors.white38, fontSize: 12)),
               ),
               Expanded(child: Divider(color: Colors.white24)),
@@ -324,7 +324,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
             maxLines: 10,
             style: const TextStyle(color: Colors.white, fontSize: 13),
             decoration: InputDecoration(
-              hintText: 'Paste your syllabus / module outline text here...',
+              hintText: 'Paste your module handout text here...',
               hintStyle: const TextStyle(color: Colors.white38),
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.05),
@@ -395,7 +395,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
             CircularProgressIndicator(color: AppColors.primary),
             SizedBox(height: 16),
             Text(
-              'AI is reading your syllabus...',
+              'AI is reading your module handout...',
               style: TextStyle(color: Colors.white70),
             ),
             SizedBox(height: 4),

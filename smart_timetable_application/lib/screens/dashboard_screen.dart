@@ -178,7 +178,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       if (studentId < 0) {
         debugPrint('ERROR: Invalid student ID: $studentId');
         setState(() {
-          errorMessage = 'Invalid student ID. Please log out and log in again.';
+          errorMessage = 'We could not verify your student account. Please sign out and sign in again.';
         });
         return;
       }
@@ -207,13 +207,13 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       } else {
         debugPrint('Failed to load student modules: ${response['message']}');
         setState(() {
-          errorMessage = 'Failed to load modules: ${response['message']}';
+          errorMessage = 'We could not load your modules right now. Please refresh and try again.';
         });
       }
     } catch (e) {
       debugPrint('Error loading student modules: $e');
       setState(() {
-        errorMessage = 'Error loading modules: $e';
+        errorMessage = 'We could not load your modules. Check your connection and try again.';
       });
     }
   }
@@ -226,7 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       if (studentId < 0) {
         debugPrint('ERROR: Invalid student ID: $studentId');
         setState(() {
-          errorMessage = 'Invalid student ID. Please log out and log in again.';
+          errorMessage = 'We could not verify your student account. Please sign out and sign in again.';
         });
         // Fallback to local data
         await _loadLocalData();
@@ -517,7 +517,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
 
   String getTodayFocus() {
     final todaySessions = getTodaySessions();
-    if (todaySessions.isEmpty) return 'No classes today - perfect for self-study!';
+    if (todaySessions.isEmpty) return 'No classes today. Great time to review notes or plan study sessions.';
     
     final firstSession = todaySessions.first;
     return 'Focus: ${firstSession.moduleName} at ${firstSession.startTime}';
@@ -1151,9 +1151,9 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
           ),
           const SizedBox(height: 16),
           
-          // New Scan Outline feature
+          // New Scan Handout feature
           _buildQuickActionButton(
-            'Scan Outline',
+            'Scan Handout',
             Icons.document_scanner,
             Colors.blue,
             () {
@@ -1479,7 +1479,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'No classes',
+                  'No classes yet',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.6),
                     fontSize: 12,
@@ -1548,7 +1548,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
           ),
           const SizedBox(height: 12),
           const Text(
-            'No classes today!',
+            'No classes today',
             style: TextStyle(
               color: Colors.white,
               fontSize: 16,
@@ -1557,7 +1557,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
           ),
           const SizedBox(height: 4),
           const Text(
-            'Perfect time for self-study or relaxation',
+            'Use this time to catch up on notes or create a study session.',
             style: TextStyle(
               color: Colors.white70,
               fontSize: 14,
@@ -2876,7 +2876,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                 const SizedBox(height: 4),
                 Text('✅ $totalSessionsAdded sessions added successfully'),
                 if (failedSessions > 0) 
-                  Text('⚠️ $failedSessions sessions failed to add'),
+                  Text('⚠️ $failedSessions sessions could not be added. You can add them manually in Study Sessions.'),
                 const SizedBox(height: 4),
                 const Text('Check your Study Sessions for the complete schedule'),
               ],
@@ -2913,7 +2913,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating study sessions: $e'),
+            content: Text('Could not create all study sessions. Please try again or add sessions manually.'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -3052,7 +3052,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             children: [
               Icon(Icons.calendar_today, color: Colors.orange),
               SizedBox(width: 8),
-              Text('No Sessions Today', style: TextStyle(color: Colors.white)),
+              Text('No study sessions today', style: TextStyle(color: Colors.white)),
             ],
           ),
           content: const Text(
@@ -3543,7 +3543,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Contact your administrator to assign modules',
+                    'Ask your admin to assign modules, then pull down to refresh.',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.5),
                       fontSize: 12,

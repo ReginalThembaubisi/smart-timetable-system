@@ -12,11 +12,19 @@ class LocalStorageService {
   static const String _studyDaysKey = 'study_days';
   static const String _pomodoroStatsKey = 'pomodoro_stats';
   SharedPreferences? _prefs;
+  static const Set<String> _legacyDemoTitles = {
+    'assignment 1 submission',
+    'semester test 1',
+    'project milestone report',
+    'practical assessment',
+    'final examination',
+  };
 
   LocalStorageService();
 
   Future<void> initialize() async {
     _prefs = await SharedPreferences.getInstance();
+    await _purgeLegacyDemoOutlineEvents();
   }
 
   Future<void> saveStudent(Student student) async {
@@ -72,10 +80,11 @@ class LocalStorageService {
 
   Future<void> saveOutlineEvents(List<OutlineEvent> events) async {
     if (_prefs != null) {
+      final cleanedIncoming = events.where((event) => !_isLegacyDemoEvent(event)).toList();
       // Merge with existing events to avoid overwriting
       final existing = getOutlineEvents();
       // Simple de-duplication based on title and date
-      for (var newEvent in events) {
+      for (var newEvent in cleanedIncoming) {
         if (!existing.any((e) => e.title == newEvent.title && e.date == newEvent.date)) {
           existing.add(newEvent);
         }
@@ -90,17 +99,42 @@ class LocalStorageService {
       final List<String>? encoded = _prefs!.getStringList(_outlineEventsKey);
       if (encoded != null && encoded.isNotEmpty) {
         try {
-          // Filter out legacy demo events that might still exist in storage.
-          return encoded
+          final decoded = encoded
               .map((e) => OutlineEvent.fromJson(jsonDecode(e)))
-              .where((event) => event.moduleCode.toUpperCase() != 'DEMO')
               .toList();
+          return decoded.where((event) => !_isLegacyDemoEvent(event)).toList();
         } catch (e) {
           debugPrint('Error parsing outline events: $e');
         }
       }
     }
     return [];
+  }
+
+  bool _isLegacyDemoEvent(OutlineEvent event) {
+    final moduleCode = event.moduleCode.trim().toUpperCase();
+    if (moduleCode == 'DEMO') return true;
+    return _legacyDemoTitles.contains(event.title.trim().toLowerCase());
+  }
+
+  Future<void> _purgeLegacyDemoOutlineEvents() async {
+    if (_prefs == null) return;
+    final encoded = _prefs!.getStringList(_outlineEventsKey);
+    if (encoded == null || encoded.isEmpty) return;
+
+    try {
+      final decoded = encoded
+          .map((e) => OutlineEvent.fromJson(jsonDecode(e)))
+          .toList();
+      final cleaned = decoded.where((event) => !_isLegacyDemoEvent(event)).toList();
+      if (cleaned.length == decoded.length) return;
+
+      final cleanedEncoded = cleaned.map((e) => jsonEncode(e.toJson())).toList();
+      await _prefs!.setStringList(_outlineEventsKey, cleanedEncoded);
+      debugPrint('Removed ${decoded.length - cleaned.length} legacy demo outline events');
+    } catch (e) {
+      debugPrint('Error purging legacy demo events: $e');
+    }
   }
 
   Future<void> saveApiKey(String key) async {

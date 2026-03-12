@@ -242,7 +242,7 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
           const Text(
-            'Scan a module outline to get started',
+            'Scan your module handout first, then your deadlines will appear here.',
             style: TextStyle(color: Colors.white38, fontSize: 14),
           ),
         ],

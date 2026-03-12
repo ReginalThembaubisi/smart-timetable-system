@@ -173,13 +173,13 @@ class _LoginScreenState extends State<LoginScreen> {
         } else {
           debugPrint('Login failed: ${response['message']}');
           setState(() {
-            _errorMessage = response['message'] ?? 'Login failed';
+            _errorMessage = response['message'] ?? 'Sign-in failed. Check your details and try again.';
             _isLoading = false;
           });
         }
       } catch (e) {
         setState(() {
-          _errorMessage = 'Login failed: $e';
+          _errorMessage = 'Sign-in failed. Please check your connection and try again.';
           _isLoading = false;
         });
       } finally {
@@ -323,7 +323,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter your student number';
+                                  return 'Enter your student number to continue.';
                                 }
                                 return null;
                               },
@@ -376,7 +376,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter your password';
+                                  return 'Enter your password to continue.';
                                 }
                                 return null;
                               },
