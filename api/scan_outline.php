@@ -84,8 +84,9 @@ if (strlen($syllabusText) < 10) {
 // Truncate to avoid token limits (~60 000 chars ≈ 15 000 tokens)
 $syllabusText = mb_substr($syllabusText, 0, 60000);
 
-// Parser-only mode: deterministic extraction for both uploads and pasted text.
-$parserOnlyMode = true;
+// Parser-only mode remains for pasted text.
+// For uploads, use parser-first and fall back to AI when parser finds nothing.
+$parserOnlyMode = !$isUploadedDocument;
 
 // Prefer deterministic parsers for uploaded files (PDF/DOCX/TXT).
 // Upload flow should not depend on noisy AI JSON output.
@@ -102,7 +103,7 @@ if ($isUploadedDocument) {
     if (!empty($deterministic)) {
         sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully');
     }
-    sendJSONResponse(true, ['events' => []], 'No assessment dates found in uploaded document.');
+    // No deterministic match; continue to AI fallback path below.
 }
 
 if ($parserOnlyMode) {
