@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_generative_ai/google_generative_ai.dart';
@@ -41,7 +40,7 @@ If no events are found, return an empty list: []
     return _postToScanEndpoint(moduleCode, text: text);
   }
 
-  /// Uploads a PDF file to the PHP backend, which extracts text and calls Gemini.
+  /// Uploads a document file to the PHP backend, which extracts text and calls AI.
   static Future<List<OutlineEvent>> extractEventsFromFile(
     List<int> fileBytes,
     String fileName,
@@ -181,7 +180,7 @@ If no events are found, return an empty list: []
 
     return decoded
         .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item as Map))
+        .map((item) => Map<String, dynamic>.from(item))
         .where((map) => _isValidDate(map['date']?.toString()))
         .map((map) {
           map['moduleCode'] = moduleCode;

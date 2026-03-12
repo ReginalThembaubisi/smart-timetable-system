@@ -1,18 +1,18 @@
-/// Web-only file picker using dart:html directly.
-/// Avoids dart:js_interop Promise bridging issues present in file_picker v10+.
+// Web-only file picker using dart:html directly.
+// Avoids dart:js_interop Promise bridging issues present in file_picker v10+.
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:async';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 import 'dart:typed_data';
 
-/// Shows a native PDF file picker and returns the selected file's bytes and
+/// Shows a native document picker and returns the selected file's bytes and
 /// name. Returns null if the user cancels.
-Future<({Uint8List bytes, String name})?> pickPdfFile() {
+Future<({Uint8List bytes, String name})?> pickOutlineFile() {
   final completer = Completer<({Uint8List bytes, String name})?>();
 
   final input = html.FileUploadInputElement()
-    ..accept = 'application/pdf,.pdf'
+    ..accept = '.pdf,.docx,.doc,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain'
     ..style.display = 'none';
 
   html.document.body!.append(input);

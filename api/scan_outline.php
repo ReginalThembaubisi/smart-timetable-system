@@ -3,7 +3,7 @@
  * POST /api/scan_outline.php
  *
  * Accepts either:
- *   A) multipart/form-data  with fields: module_code + file (PDF)
+ *   A) multipart/form-data  with fields: module_code + file (PDF/DOCX/TXT)
  *   B) application/json     with fields: module_code + text
  *
  * Response:
@@ -39,14 +39,14 @@ if (str_contains($contentType, 'multipart/form-data')) {
     $fileTmp  = $_FILES['file']['tmp_name'];
     $fileName = $_FILES['file']['name'] ?? '';
     $fileSize = $_FILES['file']['size'] ?? 0;
+    $fileType = $_FILES['file']['type'] ?? '';
 
     if ($fileSize > 10 * 1024 * 1024) { // 10 MB limit
         sendJSONResponse(false, null, 'File is too large (max 10 MB).', 400);
     }
 
-    // Extract text from PDF using pdftotext (available on most Linux servers)
-    // Fall back to reading raw bytes and letting Gemini handle it via base64
-    $syllabusText = extractTextFromPdf($fileTmp, $fileName);
+    // Extract text from supported document formats.
+    $syllabusText = extractTextFromUploadedFile($fileTmp, $fileName, $fileType);
 
 } else {
     // ── JSON TEXT path ────────────────────────────────────────────────────────
@@ -61,7 +61,13 @@ if (empty($moduleCode)) {
 }
 if (strlen($syllabusText) < 10) {
     $pdfAvailable = function_exists('exec') ? shell_exec('which pdftotext 2>/dev/null') : 'exec disabled';
-    sendJSONResponse(false, null, 'Could not extract text from PDF. pdftotext: ' . trim($pdfAvailable ?: 'not found') . '. Try pasting the text instead.', 400);
+    sendJSONResponse(
+        false,
+        null,
+        'Could not extract readable text from the uploaded document. Supported formats: PDF, DOCX, TXT. ' .
+        'pdftotext: ' . trim($pdfAvailable ?: 'not found') . '. You can still paste the text directly.',
+        400
+    );
 }
 
 // Truncate to avoid token limits (~60 000 chars ≈ 15 000 tokens)
@@ -214,8 +220,64 @@ foreach ($events as $ev) {
 
 sendJSONResponse(true, ['events' => $cleaned], 'Events extracted successfully');
 
-// ── PDF text extraction helper ────────────────────────────────────────────────
-function extractTextFromPdf(string $tmpPath, string $fileName): string
+// ── Uploaded file text extraction helpers ────────────────────────────────────
+function extractTextFromUploadedFile(string $tmpPath, string $fileName, string $fileType): string
+{
+    $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+    // Plain text files are straightforward.
+    if ($ext === 'txt' || str_contains(strtolower($fileType), 'text/plain')) {
+        $raw = file_get_contents($tmpPath);
+        return $raw === false ? '' : trim($raw);
+    }
+
+    // DOCX is a ZIP archive with XML under word/document.xml.
+    if ($ext === 'docx') {
+        return extractTextFromDocx($tmpPath);
+    }
+
+    // Legacy .doc can sometimes be extracted by antiword if available.
+    if ($ext === 'doc' && function_exists('exec')) {
+        $escaped = escapeshellarg($tmpPath);
+        $output = [];
+        exec("antiword $escaped 2>/dev/null", $output, $code);
+        if ($code === 0 && !empty($output)) {
+            return trim(implode("\n", $output));
+        }
+    }
+
+    // Default to PDF-style extraction (also safe fallback for unknown types).
+    return extractTextFromPdf($tmpPath);
+}
+
+function extractTextFromDocx(string $tmpPath): string
+{
+    if (!class_exists('ZipArchive')) {
+        return '';
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($tmpPath) !== true) {
+        return '';
+    }
+
+    $parts = [];
+    foreach (['word/document.xml', 'word/header1.xml', 'word/header2.xml', 'word/footer1.xml', 'word/footer2.xml'] as $entry) {
+        $xml = $zip->getFromName($entry);
+        if ($xml === false) {
+            continue;
+        }
+        $xml = preg_replace('/<\/w:p>/', "\n", $xml);
+        $xml = preg_replace('/<[^>]+>/', '', $xml);
+        $parts[] = html_entity_decode($xml, ENT_QUOTES | ENT_XML1, 'UTF-8');
+    }
+    $zip->close();
+
+    $text = trim(implode("\n", $parts));
+    return preg_replace('/\n{3,}/', "\n\n", $text) ?? '';
+}
+
+function extractTextFromPdf(string $tmpPath): string
 {
     // Try pdftotext (poppler-utils) — fast and accurate
     if (function_exists('exec')) {

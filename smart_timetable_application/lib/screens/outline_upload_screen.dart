@@ -40,7 +40,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     super.dispose();
   }
 
-  /// Upload a PDF file directly — PHP extracts the text and calls Gemini.
+  /// Upload a document file directly — PHP extracts the text and calls AI.
   Future<void> _uploadFile() async {
     if (_selectedModule == null) {
       _snack('Please select a module first.');
@@ -48,7 +48,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
     }
 
     try {
-      final picked = await web_picker.pickPdfFile();
+      final picked = await web_picker.pickOutlineFile();
       if (picked == null) return; // cancelled
 
       if (!mounted) return;
@@ -243,7 +243,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Open your syllabus PDF → Select All (Ctrl+A) → Copy (Ctrl+C) → Paste below',
+                    'Upload your handout (PDF/DOCX/TXT) or copy text from it and paste below',
                     style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ),
@@ -292,7 +292,7 @@ class _OutlineUploadScreenState extends State<OutlineUploadScreen> {
                       color: AppColors.primary, size: 22),
                   const SizedBox(width: 10),
                   const Text(
-                    'Upload PDF File',
+                    'Upload Document',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
