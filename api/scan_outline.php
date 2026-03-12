@@ -81,6 +81,9 @@ if (strlen($syllabusText) < 10) {
 // Truncate to avoid token limits (~60 000 chars ≈ 15 000 tokens)
 $syllabusText = mb_substr($syllabusText, 0, 60000);
 
+// Parser-only mode: deterministic extraction for both uploads and pasted text.
+$parserOnlyMode = true;
+
 // Prefer deterministic parsers for uploaded files (PDF/DOCX/TXT).
 // Upload flow should not depend on noisy AI JSON output.
 if ($isUploadedDocument) {
@@ -97,6 +100,14 @@ if ($isUploadedDocument) {
         sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully [upload-parser-v2:php-fallback]');
     }
     sendJSONResponse(true, ['events' => []], 'No assessment dates found in uploaded document.');
+}
+
+if ($parserOnlyMode) {
+    $deterministic = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
+    if (!empty($deterministic)) {
+        sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully [parser-only]');
+    }
+    sendJSONResponse(true, ['events' => []], 'No assessment dates found in provided text.');
 }
 
 // ── API key: prefer Groq (generous free tier), fall back to Gemini ────────────
