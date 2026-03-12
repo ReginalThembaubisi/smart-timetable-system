@@ -84,13 +84,17 @@ $syllabusText = mb_substr($syllabusText, 0, 60000);
 // Prefer deterministic parsers for uploaded files (PDF/DOCX/TXT).
 // Upload flow should not depend on noisy AI JSON output.
 if ($isUploadedDocument) {
-    $pythonEvents = extractEventsWithPython($uploadedFileTmp, $uploadedFileName, $moduleCode) ?? [];
-    $deterministic = $pythonEvents;
+    $pythonEvents = extractEventsWithPython($uploadedFileTmp, $uploadedFileName, $moduleCode);
+    if ($pythonEvents !== null && !empty($pythonEvents)) {
+        sendJSONResponse(true, ['events' => $pythonEvents], 'Events extracted successfully [upload-parser-v2:python]');
+    }
+
+    $deterministic = $pythonEvents ?? [];
     if (empty($deterministic)) {
         $deterministic = extractEventsFromTextHeuristic($syllabusText, $moduleCode);
     }
     if (!empty($deterministic)) {
-        sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully [upload-parser-v2]');
+        sendJSONResponse(true, ['events' => $deterministic], 'Events extracted successfully [upload-parser-v2:php-fallback]');
     }
     sendJSONResponse(true, ['events' => []], 'No assessment dates found in uploaded document.');
 }
