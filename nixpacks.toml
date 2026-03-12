@@ -7,7 +7,7 @@ nixPkgs = [
     "php82Extensions.curl",
     "php82Extensions.zip",
     "php82Packages.composer",
-    "python3",
+    "python311",
     "caddy",
     "mysql-client",
     "poppler_utils",
@@ -16,10 +16,9 @@ nixPkgs = [
 
 [phases.install]
 cmds = [
-    "composer install --no-dev --optimize-autoloader",
-    "python3 -m pip install --no-cache-dir -r extractor/requirements.txt"
+    "composer install --no-dev --optimize-autoloader"
 ]
 
 [start]
 # Run database setup/migrations before starting the PHP server
-cmd = "export PYTHON_BIN=$(which python3 || which python || true) && php scripts/database_setup_runner.php && caddy run --config Caddyfile --adapter caddyfile"
+cmd = "export PYTHON_BIN=$(which python3.11 || which python3 || which python || true) && php scripts/database_setup_runner.php && caddy run --config Caddyfile --adapter caddyfile"

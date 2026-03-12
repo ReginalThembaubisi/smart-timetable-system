@@ -317,6 +317,7 @@ function extractEventsWithPython(string $tmpPath, string $fileName, string $modu
     $candidates = [];
     $envPython = trim((string)getenv('PYTHON_BIN'));
     if ($envPython !== '') $candidates[] = $envPython;
+    $candidates[] = 'python3.11';
     $candidates[] = 'python3';
     $candidates[] = 'python';
     $candidates = array_values(array_unique($candidates));
