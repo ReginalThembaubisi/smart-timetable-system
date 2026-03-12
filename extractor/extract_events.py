@@ -53,6 +53,23 @@ def clean_spaces(text: str) -> str:
     return text.strip()
 
 
+def normalize_ocr_noise(text: str) -> str:
+    s = text
+    s = s.replace("\u2013", "-").replace("\u2014", "-").replace("\u2212", "-")
+    s = s.replace("�", " ")
+    s = re.sub(r"[^\x09\x0A\x0D\x20-\x7E]", " ", s)
+    # Common OCR confusions inside numeric contexts.
+    s = re.sub(r"(?<=\d)[Il](?=\d)", "1", s)
+    s = re.sub(r"(?<=\d)O(?=\d)", "0", s)
+    s = re.sub(r"(?<=\d)S(?=\d)", "5", s)
+    s = re.sub(r"(?<=\d)B(?=\d)", "8", s)
+    # Handle examples like "l6-20 March 2026" where first digit was OCR'd as letter.
+    s = re.sub(r"\b[Il](?=\d\b)", "1", s)
+    s = re.sub(r"\b[Il](?=\d{1,2}\s*-\s*\d{1,2}\b)", "1", s)
+    s = re.sub(r"\s+", " ", s)
+    return s.strip()
+
+
 def read_txt(path: str) -> str:
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         return f.read()
@@ -281,21 +298,28 @@ def is_generic_heading(title: str) -> bool:
 
 
 def find_dates_in_line(line: str) -> List[str]:
+    range_pattern = r"(?:week\s+of\s+)?\d{1,2}\s*[–-]\s*\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{4}"
     patterns = [
-        r"(?:week\s+of\s+)?\d{1,2}\s*[–-]\s*\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{4}",
         r"\d{4}-\d{2}-\d{2}",
-        r"\d{1,2}[/\-.]\d{1,2}(?:[/\-.]\d{2,4})?",
+        r"\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}",
         r"\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)(?:,?\s*\d{4})?",
         r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?",
     ]
     out: List[str] = []
+
+    remainder = line
+    for m in re.finditer(range_pattern, line, flags=re.I):
+        out.append(m.group(0))
+        remainder = remainder.replace(m.group(0), " ")
+
     for p in patterns:
-        for m in re.finditer(p, line, flags=re.I):
+        for m in re.finditer(p, remainder, flags=re.I):
             out.append(m.group(0))
     return out
 
 
 def parse_events(text: str, module_code: str) -> List[Dict]:
+    text = normalize_ocr_noise(text)
     lines = [clean_spaces(x) for x in re.split(r"\r?\n", text)]
     lines = [x for x in lines if x]
 
@@ -309,41 +333,57 @@ def parse_events(text: str, module_code: str) -> List[Dict]:
         date_candidates = find_dates_in_line(line) + find_dates_in_line(context)
         if not date_candidates:
             continue
-        best_date = None
-        for raw in date_candidates:
+        for raw in list(dict.fromkeys(date_candidates)):
             d = normalize_date(raw)
-            if d:
-                best_date = d
-                break
-        if not best_date:
-            continue
+            if not d:
+                continue
 
-        title = line
-        for raw in date_candidates:
-            title = title.replace(raw, " ")
-        title = clean_title(title, event_type(context) + " event")
-        if is_generic_heading(title):
-            continue
-        typ = event_type(context)
-        tm = extract_time(context)
-        key = (best_date, title.lower())
-        if key in seen:
-            continue
-        seen.add(key)
-        events.append(
-            {
-                "title": title,
-                "date": best_date,
-                "type": typ,
-                "moduleCode": module_code,
-                "time": tm,
-                "venue": None,
-                "isReminderSet": False,
-            }
-        )
+            title = infer_title_for_date(line, raw, context)
+            if is_generic_heading(title):
+                continue
+            typ = event_type(title + " " + context)
+            tm = extract_time(context)
+            key = (d, title.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            events.append(
+                {
+                    "title": title,
+                    "date": d,
+                    "type": typ,
+                    "moduleCode": module_code,
+                    "time": tm,
+                    "venue": None,
+                    "isReminderSet": False,
+                }
+            )
 
     events.sort(key=lambda e: (e["date"], e["title"]))
     return events
+
+
+def infer_title_for_date(line: str, raw_date: str, context: str) -> str:
+    escaped = re.escape(raw_date)
+    m = re.search(escaped, line, flags=re.I)
+    hay = line if m else context
+    m = re.search(escaped, hay, flags=re.I)
+
+    if m:
+        left = hay[max(0, m.start() - 80):m.start()]
+        left = clean_spaces(left)
+        pat = re.compile(
+            r"(sick\s*test|semester\s*test\s*[0-9il]*|class\s*test\s*[0-9il]*|test\s*[0-9il]+|assignment\s*\d*|quiz(?:zes)?|project(?:\s*submission)?)",
+            re.I,
+        )
+        candidates = list(pat.finditer(left))
+        if candidates:
+            title = clean_title(candidates[-1].group(1), event_type(left) + " event")
+            title = re.sub(r"\btest\s+l\b", "Test 1", title, flags=re.I)
+            return title
+
+    # Fallback: avoid using whole noisy OCR line as title.
+    return event_type(hay) + " event"
 
 
 def main() -> None:
