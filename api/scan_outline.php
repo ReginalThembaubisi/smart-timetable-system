@@ -563,7 +563,7 @@ function textQualityScore(string $text): float
 
 function normaliseDateString(string $raw): ?string
 {
-    $value = trim($raw);
+    $value = trim(normaliseOcrNoise($raw));
     if ($value === '') return null;
 
     // Normalise dash variants from PDFs/OCR: –, —, etc.
@@ -621,6 +621,7 @@ function normaliseDateString(string $raw): ?string
 
 function extractEventsFromTextHeuristic(string $text, string $moduleCode): array
 {
+    $text = normaliseOcrNoise($text);
     $lines = preg_split('/\R+/', $text) ?: [];
     $results = [];
     $seen = [];
@@ -741,6 +742,7 @@ function inferTitleForDate(string $line, string $matchedDate, string $context): 
 
 function extractDateCandidatesFromText(string $text): array
 {
+    $text = normaliseOcrNoise($text);
     $candidates = [];
     $remainder = $text;
 
@@ -768,6 +770,21 @@ function extractDateCandidatesFromText(string $text): array
     }
 
     return array_values(array_unique($candidates));
+}
+
+function normaliseOcrNoise(string $text): string
+{
+    $s = $text;
+    $s = str_replace(["\u{2013}", "\u{2014}", "\u{2212}", '�'], ['-', '-', '-', ' '], $s);
+    $s = preg_replace('/[^\x09\x0A\x0D\x20-\x7E]/u', ' ', $s) ?? $s;
+    // Common OCR confusions in numeric context.
+    $s = preg_replace('/(?<=\d)[Il](?=\d)/', '1', $s) ?? $s;
+    $s = preg_replace('/(?<=\d)O(?=\d)/', '0', $s) ?? $s;
+    $s = preg_replace('/(?<=\d)S(?=\d)/', '5', $s) ?? $s;
+    // Leading digit in ranges: l6-20 -> 16-20
+    $s = preg_replace('/\b[Il](?=\d{1,2}\s*-\s*\d{1,2}\b)/', '1', $s) ?? $s;
+    $s = preg_replace('/\s+/', ' ', $s) ?? $s;
+    return trim($s);
 }
 
 function hasAssessmentKeyword(string $text): bool
