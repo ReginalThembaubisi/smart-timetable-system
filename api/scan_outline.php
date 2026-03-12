@@ -388,7 +388,7 @@ function extractTextFromPdfUsingOcr(string $tmpPath, int $maxPages = 8): string
 
     // Render first N pages as PNG files for OCR.
     $renderOut = [];
-    exec("pdftoppm -png -f 1 -l $maxPages $escapedPdf $escapedPrefix 2>/dev/null", $renderOut, $renderCode);
+    exec("pdftoppm -png -gray -r 300 -f 1 -l $maxPages $escapedPdf $escapedPrefix 2>/dev/null", $renderOut, $renderCode);
     if ($renderCode !== 0) {
         cleanupDirectory($tmpDir);
         return '';
@@ -406,7 +406,7 @@ function extractTextFromPdfUsingOcr(string $tmpPath, int $maxPages = 8): string
     foreach ($images as $imagePath) {
         $ocrOut = [];
         $escapedImage = escapeshellarg($imagePath);
-        exec("tesseract $escapedImage stdout -l eng --psm 6 2>/dev/null", $ocrOut, $ocrCode);
+        exec("tesseract $escapedImage stdout -l eng --oem 1 --psm 11 2>/dev/null", $ocrOut, $ocrCode);
         if ($ocrCode === 0 && !empty($ocrOut)) {
             $textParts[] = implode("\n", $ocrOut);
         }
@@ -695,6 +695,10 @@ function isCredibleEvent(array $event, string $sourceText): bool
     $typeKnown = in_array($type, ['test', 'exam', 'assignment', 'practical'], true);
     if (!$hasKeyword && !$typeKnown) return false;
 
+    // Hard guard against hallucinated/gibberish titles:
+    // require title signal to appear in extracted source text.
+    if (!titleHasSourceSignal($title, $sourceText)) return false;
+
     return true;
 }
 
@@ -729,4 +733,35 @@ function dateAppearsInSource(string $yyyyMmDd, string $sourceText): bool
         }
     }
     return false;
+}
+
+function titleHasSourceSignal(string $title, string $sourceText): bool
+{
+    $titleLower = strtolower($title);
+    $sourceLower = strtolower($sourceText);
+    if ($sourceLower === '') return false;
+
+    // Keep meaningful tokens only; ignore short/common glue words.
+    preg_match_all('/[a-z0-9]{4,}/', $titleLower, $m);
+    $tokens = array_values(array_unique($m[0] ?? []));
+    if (empty($tokens)) return false;
+
+    $stop = [
+        'week', 'date', 'mark', 'final', 'online', 'physical',
+        'assessment', 'module', 'semester', 'coverage'
+    ];
+
+    $hits = 0;
+    foreach ($tokens as $t) {
+        if (in_array($t, $stop, true)) continue;
+        if (str_contains($sourceLower, $t)) {
+            $hits++;
+        }
+    }
+
+    // Require at least one strong token match; two for longer noisy titles.
+    if (count($tokens) >= 5) {
+        return $hits >= 2;
+    }
+    return $hits >= 1;
 }
