@@ -5,6 +5,7 @@ import '../services/local_storage_service.dart';
 import 'change_password_screen.dart';
 import 'study_preferences_screen.dart';
 import 'study_plan_screen.dart';
+import 'edit_profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Student student;
@@ -61,12 +62,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Card(
             child: ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Profile'),
-              subtitle: const Text('Manage your profile information'),
+              leading: const Icon(Icons.manage_accounts, color: Colors.indigo),
+              title: const Text('Profile & Modules'),
+              subtitle: const Text('Manage your profile and view assigned modules'),
               trailing: const Icon(Icons.arrow_forward_ios),
               onTap: () {
-                // Navigate to profile screen
+                _showProfileModulesSheet();
               },
             ),
           ),
@@ -109,38 +110,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: ListTile(
               leading: const Icon(Icons.notifications),
               title: const Text('Notifications'),
-              subtitle: const Text('How reminders work in the app'),
-              trailing: const Icon(Icons.info_outline),
-              onTap: () {
-                _showNotificationInfoDialog();
-              },
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.menu_book, color: Colors.deepPurple),
-              title: const Text('My Modules'),
-              subtitle: const Text('View your assigned modules'),
-              trailing: const Icon(Icons.arrow_forward_ios),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => StudyPlanScreen(student: widget.student),
-                  ),
-                );
-              },
+              subtitle: const Text('Automatic alerts for exams, deadlines, and study sessions'),
+              trailing: const Icon(Icons.check_circle, color: Colors.green),
+              onTap: null,
             ),
           ),
           Card(
             child: ListTile(
               leading: const Icon(Icons.dark_mode),
               title: const Text('Theme'),
-              subtitle: const Text('Change app appearance'),
-              trailing: const Icon(Icons.arrow_forward_ios),
-              onTap: () {
-                // Navigate to theme settings
-              },
+              subtitle: const Text('Follows your phone theme automatically'),
+              trailing: const Icon(Icons.check_circle, color: Colors.green),
+              onTap: null,
             ),
           ),
           Card(
@@ -193,37 +174,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showNotificationInfoDialog() {
-    showDialog(
+  void _showProfileModulesSheet() {
+    showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Notification Tips'),
-          content: const Text(
-            'Important alerts are automatic:\n\n'
-            '- Exam timetable updates appear from the bell icon in Exam Timetables\n'
-            '- Test and exam reminders are scheduled for upcoming deadlines\n'
-            '- Study session reminders follow your preferred reminder time',
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                final changed = await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const StudyPreferencesScreen(),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                );
-                if (changed == true) _loadPreferenceLabel();
-              },
-              child: const Text('Reminder Time'),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Profile & Modules',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.person, color: Colors.blue),
+                  title: const Text('Edit Profile'),
+                  subtitle: const Text('Update your name and email'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => EditProfileScreen(student: widget.student),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.menu_book, color: Colors.deepPurple),
+                  title: const Text('My Modules'),
+                  subtitle: const Text('View your assigned modules'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => StudyPlanScreen(student: widget.student),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
             ),
-          ],
+          ),
         );
       },
     );
