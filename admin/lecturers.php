@@ -56,7 +56,10 @@ $breadcrumbs = [
     ['label' => 'Dashboard', 'href' => 'index.php'],
     ['label' => 'Lecturers', 'href' => null],
 ];
-$page_actions = [];
+$page_actions = [
+    ['label' => 'Open Lecturer Planner', 'href' => 'lecturer_planner.php'],
+    ['label' => 'Manage Logins', 'href' => 'lecturer_credentials.php'],
+];
 include 'header_modern.php';
 ?>
 

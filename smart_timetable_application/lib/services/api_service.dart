@@ -7,10 +7,10 @@ import '../config/app_config.dart';
 
 class ApiService {
   static const String _baseUrl = AppConfig.apiBaseUrl;
-  
+
   // Get base URL for external use
   static String get baseUrl => _baseUrl;
-  
+
   // Alternative URLs to try if main one fails
   static const List<String> _fallbackUrls = [
     AppConfig.apiBaseUrl,
@@ -43,12 +43,15 @@ class ApiService {
   }
 
   // Update student profile
-  static Future<Map<String, dynamic>> updateStudentProfile(Student student) async {
+  static Future<Map<String, dynamic>> updateStudentProfile(
+      Student student) async {
     final client = _createClient();
     try {
-      debugPrint('Attempting to update profile for student ID: ${student.studentId}');
-      
-      final response = await client.post(
+      debugPrint(
+          'Attempting to update profile for student ID: ${student.studentId}');
+
+      final response = await client
+          .post(
         Uri.parse('$_baseUrl/api/update_student_profile.php'),
         headers: {
           'Content-Type': 'application/json',
@@ -59,7 +62,8 @@ class ApiService {
           'full_name': student.fullName,
           'email': student.email,
         }),
-      ).timeout(
+      )
+          .timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
           throw Exception('Profile update request timed out');
@@ -103,7 +107,8 @@ class ApiService {
       debugPrint('Profile update error: $e');
       return {
         'success': false,
-        'message': 'Network error: Unable to connect to server. Please check your connection.',
+        'message':
+            'Network error: Unable to connect to server. Please check your connection.',
       };
     } finally {
       client.close();
@@ -111,12 +116,15 @@ class ApiService {
   }
 
   // Login student - simplified approach
-  static Future<Map<String, dynamic>> loginStudent(String studentNumber, String password) async {
+  static Future<Map<String, dynamic>> loginStudent(
+      String studentNumber, String password) async {
     final client = _createClient();
     try {
-      debugPrint('Attempting login with URL: $_baseUrl${AppConfig.loginEndpoint}');
-      
-      final response = await client.post(
+      debugPrint(
+          'Attempting login with URL: $_baseUrl${AppConfig.loginEndpoint}');
+
+      final response = await client
+          .post(
         Uri.parse('$_baseUrl${AppConfig.loginEndpoint}'),
         headers: {
           'Content-Type': 'application/json',
@@ -126,10 +134,12 @@ class ApiService {
           'student_number': studentNumber,
           'password': password,
         }),
-      ).timeout(
+      )
+          .timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
-          debugPrint('Login request timed out after ${AppConfig.connectionTimeout}ms');
+          debugPrint(
+              'Login request timed out after ${AppConfig.connectionTimeout}ms');
           throw Exception('Login request timed out');
         },
       );
@@ -140,7 +150,7 @@ class ApiService {
       // Try to parse response body regardless of status code
       // Many APIs return JSON error messages even with non-200 status codes
       final decoded = _safeDecodeJsonObject(response.body);
-      
+
       if (response.statusCode == 200) {
         if (decoded != null) {
           debugPrint('Login response decoded successfully: $decoded');
@@ -172,7 +182,176 @@ class ApiService {
       debugPrint('Login error: $e');
       return {
         'success': false,
-        'message': 'Network error: Unable to connect to server. Please check your connection.',
+        'message':
+            'Network error: Unable to connect to server. Please check your connection.',
+      };
+    } finally {
+      client.close();
+    }
+  }
+
+  // Login lecturer
+  static Future<Map<String, dynamic>> loginLecturer(
+      String login, String password) async {
+    final client = _createClient();
+    try {
+      final response = await client
+          .post(
+        Uri.parse('$_baseUrl/api/lecturer_login_api.php'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'login': login,
+          'password': password,
+        }),
+      )
+          .timeout(
+        Duration(milliseconds: AppConfig.connectionTimeout),
+        onTimeout: () {
+          throw Exception('Lecturer login request timed out');
+        },
+      );
+
+      final decoded = _safeDecodeJsonObject(response.body) ?? {};
+      if (response.statusCode == 200) {
+        return decoded;
+      }
+      return {
+        'success': false,
+        'message': decoded['message'] ?? 'Server error: ${response.statusCode}',
+      };
+    } catch (e) {
+      debugPrint('Lecturer login error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: Unable to connect to server.',
+      };
+    } finally {
+      client.close();
+    }
+  }
+
+  static Future<Map<String, dynamic>> getLecturerTimetable(
+      int lecturerId) async {
+    final client = _createClient();
+    try {
+      final response = await client
+          .get(
+        Uri.parse(
+            '$_baseUrl/api/get_lecturer_timetable.php?lecturer_id=$lecturerId'),
+      )
+          .timeout(
+        Duration(milliseconds: AppConfig.connectionTimeout),
+        onTimeout: () {
+          throw Exception('Lecturer timetable request timed out');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return _safeDecodeJsonObject(response.body) ?? {};
+      }
+      return {
+        'success': false,
+        'message': 'Failed to fetch lecturer timetable: ${response.statusCode}',
+      };
+    } catch (e) {
+      debugPrint('Lecturer timetable fetch error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    } finally {
+      client.close();
+    }
+  }
+
+  static Future<Map<String, dynamic>> getSharedAssessmentCalendar(
+    int moduleId, {
+    int days = 30,
+  }) async {
+    final client = _createClient();
+    try {
+      final response = await client
+          .get(
+        Uri.parse(
+            '$_baseUrl/api/get_shared_assessment_calendar.php?module_id=$moduleId&days=$days'),
+      )
+          .timeout(
+        Duration(milliseconds: AppConfig.connectionTimeout),
+        onTimeout: () {
+          throw Exception('Shared calendar request timed out');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return _safeDecodeJsonObject(response.body) ?? {};
+      }
+      return {
+        'success': false,
+        'message': 'Failed to fetch shared calendar: ${response.statusCode}',
+      };
+    } catch (e) {
+      debugPrint('Shared calendar fetch error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    } finally {
+      client.close();
+    }
+  }
+
+  static Future<Map<String, dynamic>> createLecturerAssessment({
+    required int lecturerId,
+    required int moduleId,
+    required String title,
+    required String assessmentDate,
+    required String assessmentTime,
+    int duration = 60,
+    String? notes,
+    bool forcePublish = false,
+  }) async {
+    final client = _createClient();
+    try {
+      final response = await client
+          .post(
+        Uri.parse('$_baseUrl/api/create_lecturer_assessment.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'lecturer_id': lecturerId,
+          'module_id': moduleId,
+          'title': title,
+          'assessment_date': assessmentDate,
+          'assessment_time': assessmentTime,
+          'duration': duration,
+          'notes': notes,
+          'force_publish': forcePublish,
+        }),
+      )
+          .timeout(
+        Duration(milliseconds: AppConfig.connectionTimeout),
+        onTimeout: () {
+          throw Exception('Create assessment request timed out');
+        },
+      );
+
+      final decoded = _safeDecodeJsonObject(response.body) ?? {};
+      if (response.statusCode == 200) {
+        return decoded;
+      }
+      return {
+        'success': false,
+        'message': decoded['message'] ??
+            'Failed to create assessment: ${response.statusCode}',
+        'data': decoded['data'],
+      };
+    } catch (e) {
+      debugPrint('Create lecturer assessment error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
       };
     } finally {
       client.close();
@@ -190,9 +369,12 @@ class ApiService {
         };
       }
       debugPrint('Fetching timetable for student ID: $studentId');
-      final response = await client.get(
-        Uri.parse('$_baseUrl${AppConfig.timetableEndpoint}?student_id=$studentId'),
-      ).timeout(
+      final response = await client
+          .get(
+        Uri.parse(
+            '$_baseUrl${AppConfig.timetableEndpoint}?student_id=$studentId'),
+      )
+          .timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
           throw Exception('Timetable request timed out');
@@ -208,7 +390,9 @@ class ApiService {
         final List<dynamic> sessions =
             (decoded['data'] is Map && decoded['data']['sessions'] is List)
                 ? List<dynamic>.from(decoded['data']['sessions'])
-                : (decoded['sessions'] is List ? List<dynamic>.from(decoded['sessions']) : <dynamic>[]);
+                : (decoded['sessions'] is List
+                    ? List<dynamic>.from(decoded['sessions'])
+                    : <dynamic>[]);
         // Group into timetable map: { day: [sessions...] }
         final Map<String, List<dynamic>> grouped = <String, List<dynamic>>{};
         for (final s in sessions) {
@@ -223,7 +407,7 @@ class ApiService {
           'success': success,
           'message': message,
           'timetable': grouped,
-          'data': { 'timetable': grouped },
+          'data': {'timetable': grouped},
         };
       } else {
         debugPrint('Timetable API error: ${response.statusCode}');
@@ -255,9 +439,12 @@ class ApiService {
     final client = _createClient();
     try {
       debugPrint('Fetching modules for student ID: $studentId');
-      final response = await client.get(
-        Uri.parse('$_baseUrl${AppConfig.modulesEndpoint}?student_id=$studentId'),
-      ).timeout(
+      final response = await client
+          .get(
+        Uri.parse(
+            '$_baseUrl${AppConfig.modulesEndpoint}?student_id=$studentId'),
+      )
+          .timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
           throw Exception('Modules request timed out');
@@ -272,13 +459,15 @@ class ApiService {
         final List<dynamic> modules =
             (decoded['data'] is Map && decoded['data']['modules'] is List)
                 ? List<dynamic>.from(decoded['data']['modules'])
-                : (decoded['modules'] is List ? List<dynamic>.from(decoded['modules']) : <dynamic>[]);
+                : (decoded['modules'] is List
+                    ? List<dynamic>.from(decoded['modules'])
+                    : <dynamic>[]);
         debugPrint('Modules data received successfully: ${modules.length}');
         return {
           'success': success,
           'message': message,
           'modules': modules,
-          'data': { 'modules': modules },
+          'data': {'modules': modules},
         };
       } else {
         debugPrint('Modules API error: ${response.statusCode}');
@@ -300,13 +489,11 @@ class ApiService {
 
   // Change student password
   static Future<Map<String, dynamic>> changeStudentPassword(
-    int studentId, 
-    String currentPassword, 
-    String newPassword
-  ) async {
+      int studentId, String currentPassword, String newPassword) async {
     final client = _createClient();
     try {
-      final response = await client.post(
+      final response = await client
+          .post(
         Uri.parse('$_baseUrl/api/change_password_api.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -314,7 +501,8 @@ class ApiService {
           'current_password': currentPassword,
           'new_password': newPassword,
         }),
-      ).timeout(
+      )
+          .timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
           throw Exception('Password change request timed out');
@@ -345,9 +533,11 @@ class ApiService {
   static Future<Map<String, dynamic>> getAllModules() async {
     final client = _createClient();
     try {
-      final response = await client.get(
+      final response = await client
+          .get(
         Uri.parse('$_baseUrl${AppConfig.allModulesEndpoint}'),
-      ).timeout(
+      )
+          .timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
           throw Exception('All modules request timed out');
@@ -361,12 +551,14 @@ class ApiService {
         final List<dynamic> modules =
             (decoded['data'] is Map && decoded['data']['modules'] is List)
                 ? List<dynamic>.from(decoded['data']['modules'])
-                : (decoded['modules'] is List ? List<dynamic>.from(decoded['modules']) : <dynamic>[]);
+                : (decoded['modules'] is List
+                    ? List<dynamic>.from(decoded['modules'])
+                    : <dynamic>[]);
         return {
           'success': success,
           'message': message,
           'modules': modules,
-          'data': { 'modules': modules },
+          'data': {'modules': modules},
         };
       } else {
         return {
@@ -386,13 +578,17 @@ class ApiService {
   }
 
   // Get student exam timetable
-  static Future<Map<String, dynamic>> getStudentExamTimetable(int studentId) async {
+  static Future<Map<String, dynamic>> getStudentExamTimetable(
+      int studentId) async {
     final client = _createClient();
     try {
       debugPrint('Fetching exam timetable for student ID: $studentId');
-      final response = await client.get(
-        Uri.parse('$_baseUrl/api/get_student_exam_timetable.php?student_id=$studentId'),
-      ).timeout(
+      final response = await client
+          .get(
+        Uri.parse(
+            '$_baseUrl/api/get_student_exam_timetable.php?student_id=$studentId'),
+      )
+          .timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
           throw Exception('Exam timetable request timed out');
@@ -401,7 +597,7 @@ class ApiService {
 
       debugPrint('Exam timetable response status: ${response.statusCode}');
       debugPrint('Exam timetable response body: ${response.body}');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         debugPrint('Exam timetable data received successfully');
@@ -425,13 +621,17 @@ class ApiService {
   }
 
   // Get student exam notifications
-  static Future<Map<String, dynamic>> getStudentExamNotifications(int studentId) async {
+  static Future<Map<String, dynamic>> getStudentExamNotifications(
+      int studentId) async {
     final client = _createClient();
     try {
       debugPrint('Fetching exam notifications for student ID: $studentId');
-      final response = await client.get(
-        Uri.parse('$_baseUrl/api/get_student_exam_notifications.php?student_id=$studentId'),
-      ).timeout(
+      final response = await client
+          .get(
+        Uri.parse(
+            '$_baseUrl/api/get_student_exam_notifications.php?student_id=$studentId'),
+      )
+          .timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
           throw Exception('Exam notifications request timed out');
@@ -439,7 +639,7 @@ class ApiService {
       );
 
       debugPrint('Exam notifications response status: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         debugPrint('Exam notifications data received successfully');
@@ -448,7 +648,8 @@ class ApiService {
         debugPrint('Exam notifications API error: ${response.statusCode}');
         return {
           'success': false,
-          'message': 'Failed to fetch exam notifications: ${response.statusCode}',
+          'message':
+              'Failed to fetch exam notifications: ${response.statusCode}',
         };
       }
     } catch (e) {
@@ -463,17 +664,20 @@ class ApiService {
   }
 
   // Mark exam notification as read
-  static Future<Map<String, dynamic>> markExamNotificationRead(int notificationId, int studentId) async {
+  static Future<Map<String, dynamic>> markExamNotificationRead(
+      int notificationId, int studentId) async {
     final client = _createClient();
     try {
-      final response = await client.post(
+      final response = await client
+          .post(
         Uri.parse('$_baseUrl/api/mark_notification_read.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'notification_id': notificationId,
           'student_id': studentId,
         }),
-      ).timeout(
+      )
+          .timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
           throw Exception('Mark notification request timed out');
@@ -486,7 +690,8 @@ class ApiService {
       } else {
         return {
           'success': false,
-          'message': 'Failed to mark notification as read: ${response.statusCode}',
+          'message':
+              'Failed to mark notification as read: ${response.statusCode}',
         };
       }
     } catch (e) {
@@ -508,7 +713,8 @@ class ApiService {
   }) async {
     final client = _createClient();
     try {
-      final response = await client.post(
+      final response = await client
+          .post(
         Uri.parse('$_baseUrl/api/register_device_token.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -516,7 +722,8 @@ class ApiService {
           'device_token': deviceToken,
           'platform': platform,
         }),
-      ).timeout(
+      )
+          .timeout(
         Duration(milliseconds: AppConfig.connectionTimeout),
         onTimeout: () {
           throw Exception('Register device token request timed out');

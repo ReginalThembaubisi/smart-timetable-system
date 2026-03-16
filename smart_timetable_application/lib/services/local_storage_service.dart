@@ -2,10 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/student.dart';
+import '../models/lecturer.dart';
 import '../models/outline_event.dart';
 
 class LocalStorageService {
   static const String _studentKey = 'student_data';
+  static const String _lecturerKey = 'lecturer_data';
   static const String _outlineEventsKey = 'outline_events';
   static const String _apiKeyKey = 'gemini_api_key';
   static const String _studyPreferenceKey = 'study_preference';
@@ -33,6 +35,12 @@ class LocalStorageService {
     }
   }
 
+  Future<void> saveLecturer(Lecturer lecturer) async {
+    if (_prefs != null) {
+      await _prefs!.setString(_lecturerKey, jsonEncode(lecturer.toJson()));
+    }
+  }
+
   Student? getStudent() {
     if (_prefs != null) {
       final studentData = _prefs!.getString(_studentKey);
@@ -47,8 +55,26 @@ class LocalStorageService {
     return null;
   }
 
+  Lecturer? getLecturer() {
+    if (_prefs != null) {
+      final lecturerData = _prefs!.getString(_lecturerKey);
+      if (lecturerData != null) {
+        try {
+          return Lecturer.fromJson(jsonDecode(lecturerData));
+        } catch (e) {
+          debugPrint('Error parsing lecturer data: $e');
+        }
+      }
+    }
+    return null;
+  }
+
   bool isStudentLoggedIn() {
     return getStudent() != null;
+  }
+
+  bool isLecturerLoggedIn() {
+    return getLecturer() != null;
   }
 
   Future<int?> getStudentId() async {
@@ -60,6 +86,12 @@ class LocalStorageService {
   Future<void> clearStudent() async {
     if (_prefs != null) {
       await _prefs!.remove(_studentKey);
+    }
+  }
+
+  Future<void> clearLecturer() async {
+    if (_prefs != null) {
+      await _prefs!.remove(_lecturerKey);
     }
   }
 
@@ -80,19 +112,22 @@ class LocalStorageService {
 
   Future<void> saveOutlineEvents(List<OutlineEvent> events) async {
     if (_prefs != null) {
-      final cleanedIncoming = events.where((event) => !_isLegacyDemoEvent(event)).toList();
+      final cleanedIncoming =
+          events.where((event) => !_isLegacyDemoEvent(event)).toList();
       // Merge with existing events to avoid overwriting
       final existing = getOutlineEvents();
       // Upsert by title and date so reminder toggles and edits persist correctly.
       for (var newEvent in cleanedIncoming) {
-        final index = existing.indexWhere((e) => e.title == newEvent.title && e.date == newEvent.date);
+        final index = existing.indexWhere(
+            (e) => e.title == newEvent.title && e.date == newEvent.date);
         if (index >= 0) {
           existing[index] = newEvent;
         } else {
           existing.add(newEvent);
         }
       }
-      final List<String> encoded = existing.map((e) => jsonEncode(e.toJson())).toList().cast<String>();
+      final List<String> encoded =
+          existing.map((e) => jsonEncode(e.toJson())).toList().cast<String>();
       await _prefs!.setStringList(_outlineEventsKey, encoded);
     }
   }
@@ -102,9 +137,8 @@ class LocalStorageService {
       final List<String>? encoded = _prefs!.getStringList(_outlineEventsKey);
       if (encoded != null && encoded.isNotEmpty) {
         try {
-          final decoded = encoded
-              .map((e) => OutlineEvent.fromJson(jsonDecode(e)))
-              .toList();
+          final decoded =
+              encoded.map((e) => OutlineEvent.fromJson(jsonDecode(e))).toList();
           return decoded.where((event) => !_isLegacyDemoEvent(event)).toList();
         } catch (e) {
           debugPrint('Error parsing outline events: $e');
@@ -126,15 +160,17 @@ class LocalStorageService {
     if (encoded == null || encoded.isEmpty) return;
 
     try {
-      final decoded = encoded
-          .map((e) => OutlineEvent.fromJson(jsonDecode(e)))
-          .toList();
-      final cleaned = decoded.where((event) => !_isLegacyDemoEvent(event)).toList();
+      final decoded =
+          encoded.map((e) => OutlineEvent.fromJson(jsonDecode(e))).toList();
+      final cleaned =
+          decoded.where((event) => !_isLegacyDemoEvent(event)).toList();
       if (cleaned.length == decoded.length) return;
 
-      final cleanedEncoded = cleaned.map((e) => jsonEncode(e.toJson())).toList();
+      final cleanedEncoded =
+          cleaned.map((e) => jsonEncode(e.toJson())).toList();
       await _prefs!.setStringList(_outlineEventsKey, cleanedEncoded);
-      debugPrint('Removed ${decoded.length - cleaned.length} legacy demo outline events');
+      debugPrint(
+          'Removed ${decoded.length - cleaned.length} legacy demo outline events');
     } catch (e) {
       debugPrint('Error purging legacy demo events: $e');
     }

@@ -6,22 +6,24 @@ import 'services/notification_service.dart';
 import 'models/student.dart';
 import 'config/app_theme.dart';
 import 'config/app_colors.dart';
+import 'screens/lecturer_login_screen.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Load environment variables securely
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
-    debugPrint("Note: No .env file found. Using dart-define fallbacks if available.");
+    debugPrint(
+        "Note: No .env file found. Using dart-define fallbacks if available.");
   }
-  
+
   // Initialize notification service
   await NotificationService.initialize();
-  
+
   runApp(const StudentTimetableApp());
 }
 
@@ -41,9 +43,9 @@ class StudentTimetableApp extends StatelessWidget {
           // Ensure text scales properly on mobile
           data: MediaQuery.of(context).copyWith(
             textScaler: MediaQuery.of(context).textScaler.clamp(
-              minScaleFactor: 0.8,
-              maxScaleFactor: 1.2,
-            ),
+                  minScaleFactor: 0.8,
+                  maxScaleFactor: 1.2,
+                ),
           ),
           child: child!,
         );
@@ -79,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final localStorage = LocalStorageService();
       await localStorage.initialize();
-      
+
       if (localStorage.isStudentLoggedIn()) {
         final student = localStorage.getStudent();
         if (student != null) {
@@ -120,35 +122,40 @@ class _LoginScreenState extends State<LoginScreen> {
       try {
         // Real authentication with PHP backend
         final response = await ApiService.loginStudent(studentNumber, password);
-        
+
         debugPrint('Login response received: $response');
-        
+
         if (response['success'] == true) {
           // Support both {student:{...}} and {data:{student:{...}}} response shapes
           final dynamic directStudent = response['student'];
-          final dynamic nestedStudent = (response['data'] is Map) ? response['data']['student'] : null;
-          final Map<String, dynamic>? studentJson = (directStudent is Map<String, dynamic>)
+          final dynamic nestedStudent =
+              (response['data'] is Map) ? response['data']['student'] : null;
+          final Map<String, dynamic>? studentJson = (directStudent
+                  is Map<String, dynamic>)
               ? directStudent
               : (nestedStudent is Map<String, dynamic> ? nestedStudent : null);
-          
+
           debugPrint('Direct student: $directStudent');
           debugPrint('Nested student: $nestedStudent');
           debugPrint('Student JSON: $studentJson');
-          
+
           if (studentJson == null) {
-            debugPrint('ERROR: Student object not found in response. Full response: $response');
-            throw Exception('Unexpected response: missing student object. Response: $response');
+            debugPrint(
+                'ERROR: Student object not found in response. Full response: $response');
+            throw Exception(
+                'Unexpected response: missing student object. Response: $response');
           }
-          
+
           final student = Student.fromJson(studentJson);
-          debugPrint('Student created: ID=${student.studentId}, Number=${student.studentNumber}, Name=${student.fullName}');
-          
+          debugPrint(
+              'Student created: ID=${student.studentId}, Number=${student.studentNumber}, Name=${student.fullName}');
+
           // Validate student ID
           if (student.studentId <= 0) {
             debugPrint('ERROR: Invalid student ID: ${student.studentId}');
             throw Exception('Invalid student ID received from server');
           }
-          
+
           // Save student data locally for persistent login
           try {
             final localStorage = LocalStorageService();
@@ -159,9 +166,10 @@ class _LoginScreenState extends State<LoginScreen> {
           } catch (e) {
             debugPrint('Warning: Could not save login data locally: $e');
           }
-          
+
           if (mounted) {
-            debugPrint('Navigating to dashboard with student ID: ${student.studentId}');
+            debugPrint(
+                'Navigating to dashboard with student ID: ${student.studentId}');
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (context) => DashboardScreen(
@@ -173,13 +181,15 @@ class _LoginScreenState extends State<LoginScreen> {
         } else {
           debugPrint('Login failed: ${response['message']}');
           setState(() {
-            _errorMessage = response['message'] ?? 'Sign-in failed. Check your details and try again.';
+            _errorMessage = response['message'] ??
+                'Sign-in failed. Check your details and try again.';
             _isLoading = false;
           });
         }
       } catch (e) {
         setState(() {
-          _errorMessage = 'Sign-in failed. Please check your connection and try again.';
+          _errorMessage =
+              'Sign-in failed. Please check your connection and try again.';
           _isLoading = false;
         });
       } finally {
@@ -198,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final screenHeight = MediaQuery.of(context).size.height;
     final isMobile = screenWidth < 600;
     final isSmallMobile = screenWidth < 400;
-    
+
     // Responsive values
     final horizontalPadding = isMobile ? (isSmallMobile ? 20.0 : 24.0) : 32.0;
     final iconSize = isMobile ? (isSmallMobile ? 50.0 : 55.0) : 60.0;
@@ -206,7 +216,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final subtitleFontSize = isMobile ? 14.0 : 16.0;
     final spacing = isMobile ? 24.0 : 40.0;
     final smallSpacing = isMobile ? 16.0 : 24.0;
-    
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -223,7 +233,8 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 16),
+              padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding, vertical: 16),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxWidth: 500,
@@ -249,9 +260,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: Colors.white,
                       ),
                     ),
-                    
+
                     SizedBox(height: spacing),
-                    
+
                     // Title
                     Text(
                       'Smart Timetable',
@@ -262,9 +273,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    
+
                     SizedBox(height: 8),
-                    
+
                     Text(
                       'Sign in to view your schedule',
                       style: TextStyle(
@@ -273,9 +284,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    
+
                     SizedBox(height: spacing),
-                  
+
                     // Login Form
                     Container(
                       padding: EdgeInsets.all(isMobile ? 20 : 24),
@@ -298,19 +309,24 @@ class _LoginScreenState extends State<LoginScreen> {
                               textInputAction: TextInputAction.next,
                               decoration: InputDecoration(
                                 labelText: 'Student Number',
-                                labelStyle: const TextStyle(color: Colors.white70),
-                                prefixIcon: const Icon(Icons.person, color: Colors.white70),
+                                labelStyle:
+                                    const TextStyle(color: Colors.white70),
+                                prefixIcon: const Icon(Icons.person,
+                                    color: Colors.white70),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Colors.white30),
+                                  borderSide:
+                                      const BorderSide(color: Colors.white30),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Colors.white30),
+                                  borderSide:
+                                      const BorderSide(color: Colors.white30),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Colors.white),
+                                  borderSide:
+                                      const BorderSide(color: Colors.white),
                                 ),
                                 contentPadding: EdgeInsets.symmetric(
                                   horizontal: 16,
@@ -328,9 +344,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 return null;
                               },
                             ),
-                            
+
                             SizedBox(height: isMobile ? 16 : 20),
-                            
+
                             // Password
                             TextFormField(
                               controller: _passwordController,
@@ -340,11 +356,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               onFieldSubmitted: (_) => _login(),
                               decoration: InputDecoration(
                                 labelText: 'Password',
-                                labelStyle: const TextStyle(color: Colors.white70),
-                                prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                                labelStyle:
+                                    const TextStyle(color: Colors.white70),
+                                prefixIcon: const Icon(Icons.lock,
+                                    color: Colors.white70),
                                 suffixIcon: IconButton(
                                   icon: Icon(
-                                    _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                                    _obscurePassword
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
                                     color: Colors.white70,
                                   ),
                                   onPressed: () {
@@ -355,15 +375,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Colors.white30),
+                                  borderSide:
+                                      const BorderSide(color: Colors.white30),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Colors.white30),
+                                  borderSide:
+                                      const BorderSide(color: Colors.white30),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Colors.white),
+                                  borderSide:
+                                      const BorderSide(color: Colors.white),
                                 ),
                                 contentPadding: EdgeInsets.symmetric(
                                   horizontal: 16,
@@ -381,7 +404,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 return null;
                               },
                             ),
-                            
+
                             if (_errorMessage != null) ...[
                               SizedBox(height: isMobile ? 12 : 16),
                               Container(
@@ -389,7 +412,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 decoration: BoxDecoration(
                                   color: Colors.red.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                                  border: Border.all(
+                                      color: Colors.red.withValues(alpha: 0.3)),
                                 ),
                                 child: Text(
                                   _errorMessage!,
@@ -401,9 +425,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ],
-                            
+
                             SizedBox(height: smallSpacing),
-                            
+
                             // Login Button
                             SizedBox(
                               width: double.infinity,
@@ -421,7 +445,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ? SizedBox(
                                         height: isMobile ? 20 : 24,
                                         width: isMobile ? 20 : 24,
-                                        child: const CircularProgressIndicator(strokeWidth: 2),
+                                        child: const CircularProgressIndicator(
+                                            strokeWidth: 2),
                                       )
                                     : Text(
                                         'Sign In',
@@ -432,14 +457,49 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                               ),
                             ),
-                            
+
+                            SizedBox(height: isMobile ? 10 : 12),
+
+                            SizedBox(
+                              width: double.infinity,
+                              height: isMobile ? 46 : 48,
+                              child: OutlinedButton.icon(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                const LecturerLoginScreen(),
+                                          ),
+                                        );
+                                      },
+                                icon: const Icon(Icons.school_outlined),
+                                label: Text(
+                                  'Lecturer Portal',
+                                  style: TextStyle(
+                                    fontSize: isMobile ? 15 : 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  side: BorderSide(
+                                    color: Colors.white.withValues(alpha: 0.65),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
-                    
+
                     SizedBox(height: isMobile ? 16 : 20),
-                    
+
                     // Help Text
                     Container(
                       padding: EdgeInsets.all(isMobile ? 12 : 16),
@@ -473,7 +533,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                       ),
                     ),
-                    
                   ],
                 ),
               ),

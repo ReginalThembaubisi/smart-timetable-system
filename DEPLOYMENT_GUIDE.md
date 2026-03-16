@@ -189,14 +189,31 @@ This guide covers deployment options for both the PHP backend and Flutter mobile
 1. **Build release APK:**
    ```bash
    cd smart_timetable_application
-   flutter build apk --release
+   flutter build apk --release --flavor student -t lib/main.dart
+   flutter build apk --release --flavor lecturer -t lib/main_lecturer.dart
    ```
 2. **Or build App Bundle (recommended):**
    ```bash
-   flutter build appbundle
+   flutter build appbundle --flavor student -t lib/main.dart
+   flutter build appbundle --flavor lecturer -t lib/main_lecturer.dart
    ```
 3. **Upload to Google Play Console**
 4. **Update API URL** in production build
+
+#### Android release signing (required for production)
+1. Create/upload a release keystore file (for example: `android/keystore/release.jks`).
+2. Copy `android/key.properties.example` to `android/key.properties`.
+3. Fill real values in `android/key.properties`:
+   ```properties
+   storeFile=../keystore/release.jks
+   storePassword=your_store_password
+   keyAlias=your_key_alias
+   keyPassword=your_key_password
+   ```
+4. Build release again using flavor commands above.
+5. Verify output files:
+   - `build/app/outputs/flutter-apk/app-student-release.apk`
+   - `build/app/outputs/flutter-apk/app-lecturer-release.apk`
 
 #### iOS (App Store):
 1. **Build iOS app:**

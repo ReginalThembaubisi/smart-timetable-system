@@ -9,6 +9,9 @@ USE smart_timetable;
 -- Drop tables if they exist (in reverse order of dependencies)
 -- Drop tables with foreign keys first
 DROP TABLE IF EXISTS exam_notifications;
+DROP TABLE IF EXISTS student_assessment_notifications;
+DROP TABLE IF EXISTS lecturer_assessments;
+DROP TABLE IF EXISTS lecturer_auth;
 DROP TABLE IF EXISTS program_modules;
 DROP TABLE IF EXISTS student_modules;
 DROP TABLE IF EXISTS exams;
@@ -46,9 +49,25 @@ CREATE TABLE modules (
 CREATE TABLE lecturers (
     lecturer_id INT AUTO_INCREMENT PRIMARY KEY,
     lecturer_name VARCHAR(255) NOT NULL,
+    lecturer_code VARCHAR(50) UNIQUE,
     email VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Create lecturer authentication table
+CREATE TABLE lecturer_auth (
+    auth_id INT AUTO_INCREMENT PRIMARY KEY,
+    lecturer_id INT NOT NULL UNIQUE,
+    login_identifier VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    is_active TINYINT(1) DEFAULT 1,
+    last_login TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (lecturer_id) REFERENCES lecturers(lecturer_id) ON DELETE CASCADE,
+    INDEX idx_login_identifier (login_identifier),
+    INDEX idx_lecturer_auth_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Create venues table
@@ -105,6 +124,45 @@ CREATE TABLE exams (
     FOREIGN KEY (module_id) REFERENCES modules(module_id) ON DELETE CASCADE,
     FOREIGN KEY (venue_id) REFERENCES venues(venue_id) ON DELETE SET NULL,
     INDEX idx_exam_date (exam_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Create lecturer assessments table (tests published by lecturers)
+CREATE TABLE lecturer_assessments (
+    assessment_id INT AUTO_INCREMENT PRIMARY KEY,
+    module_id INT NOT NULL,
+    created_by_lecturer_id INT NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    assessment_date DATE NOT NULL,
+    assessment_time TIME NOT NULL,
+    duration INT DEFAULT 60,
+    status VARCHAR(20) DEFAULT 'published',
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (module_id) REFERENCES modules(module_id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by_lecturer_id) REFERENCES lecturers(lecturer_id) ON DELETE CASCADE,
+    INDEX idx_assessment_date (assessment_date),
+    INDEX idx_assessment_module (module_id),
+    INDEX idx_assessment_lecturer (created_by_lecturer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Create queued student notifications for lecturer assessments
+CREATE TABLE student_assessment_notifications (
+    notification_id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    assessment_id INT NOT NULL,
+    notification_type VARCHAR(30) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    scheduled_for DATETIME NOT NULL,
+    sent_at DATETIME NULL,
+    is_sent TINYINT(1) DEFAULT 0,
+    is_read TINYINT(1) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+    FOREIGN KEY (assessment_id) REFERENCES lecturer_assessments(assessment_id) ON DELETE CASCADE,
+    INDEX idx_student_sent (student_id, is_sent, is_read),
+    INDEX idx_notification_schedule (is_sent, scheduled_for)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Create exam_notifications table

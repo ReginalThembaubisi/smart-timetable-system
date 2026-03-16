@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/api_helpers.php';
+require_once __DIR__ . '/../includes/lecturer_system.php';
 
 setCORSHeaders();
 
@@ -15,9 +16,17 @@ try {
     $studentId = (int) $data['student_id'];
 
     $pdo = getDBConnection();
+    ensureLecturerSystemTables($pdo);
 
-    $stmt = $pdo->prepare('UPDATE exam_notifications SET is_read = 1 WHERE notification_id = ? AND student_id = ?');
-    $stmt->execute([$notificationId, $studentId]);
+    $assessmentOffset = 1000000000;
+    if ($notificationId >= $assessmentOffset) {
+        $rawId = $notificationId - $assessmentOffset;
+        $stmt = $pdo->prepare('UPDATE student_assessment_notifications SET is_read = 1 WHERE notification_id = ? AND student_id = ?');
+        $stmt->execute([$rawId, $studentId]);
+    } else {
+        $stmt = $pdo->prepare('UPDATE exam_notifications SET is_read = 1 WHERE notification_id = ? AND student_id = ?');
+        $stmt->execute([$notificationId, $studentId]);
+    }
 
     if ($stmt->rowCount() > 0) {
         sendJSONResponse(true, null, 'Notification marked as read');

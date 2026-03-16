@@ -30,6 +30,8 @@ if ($assetVersion === false) {
         'programs.php' => 'Programmes',
         'exams.php' => 'Exam Timetables',
         'student_modules.php' => 'Student Modules',
+        'lecturer_planner.php' => 'Lecturer Planner',
+        'lecturer_credentials.php' => 'Lecturer Credentials',
         'clear_data.php' => 'Clear Data',
         'export.php' => 'Export',
         'register.php' => 'Register Admin',
@@ -1132,6 +1134,15 @@ if ($assetVersion === false) {
                                 <circle cx="12" cy="7" r="4"></circle>
                             </svg>
                         </i> Lecturers</a>
+                    <a href="<?= $baseHref ?>admin/lecturer_credentials.php"
+                        class="<?= $current_page === 'lecturer_credentials.php' ? 'active' : '' ?>"><i class="icon">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                                <rect x="16" y="2" width="6" height="6" rx="1"></rect>
+                                <path d="M19 4v2"></path>
+                            </svg>
+                        </i> Lecturer Logins</a>
                     <a href="<?= $baseHref ?>admin/venues.php"
                         class="<?= $current_page === 'venues.php' ? 'active' : '' ?>"><i class="icon">
                             <!-- lucide:map-pin -->
@@ -1195,6 +1206,16 @@ if ($assetVersion === false) {
                                 <path d="M12 13v3"></path>
                             </svg>
                         </i> Exam Timetables</a>
+                    <a href="<?= $baseHref ?>admin/lecturer_planner.php"
+                        class="<?= $current_page === 'lecturer_planner.php' ? 'active' : '' ?>"><i class="icon">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 20v-6"></path>
+                                <path d="M9 14h6"></path>
+                                <path d="M6 4h12"></path>
+                                <path d="M6 8h12"></path>
+                                <rect x="4" y="2" width="16" height="20" rx="2"></rect>
+                            </svg>
+                        </i> Lecturer Planner</a>
                     <a href="<?= $baseHref ?>admin/student_modules.php"
                         class="<?= $current_page === 'student_modules.php' ? 'active' : '' ?>"><i class="icon">
                             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1289,6 +1310,8 @@ if ($assetVersion === false) {
                     'Lecturers' => 'Manage lecturer profiles and assignments',
                     'Venues' => 'Manage rooms and capacities',
                     'Exam Timetables' => 'Plan and publish exam schedules',
+                    'Lecturer Planner' => 'Show lecturer timetables and recommend low-conflict test dates',
+                    'Lecturer Credentials' => 'Create and manage lecturer login identifiers and passwords',
                 ];
                 $pageSubtitle = $subtitleMap[$currentSectionLabel] ?? 'Operate your timetable with clarity and control';
                 ?>

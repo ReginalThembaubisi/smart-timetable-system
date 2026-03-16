@@ -37,15 +37,19 @@ This system helps universities efficiently manage class schedules and academic i
 - **Study Planning** - Create and track personalized study sessions
 - **Study Timer** - Built-in timer to track study time
 - **Exam Schedules** - View upcoming exams and receive notifications
+- **Lecturer Test Alerts** - Receive immediate, 7-day, and 1-day reminders for lecturer-published tests
 - **Offline Support** - Access data offline after initial sync
 
 ### 🖥️ For Administrators (Web Interface)
 - **Student Management** - Add, edit, and view all student information
 - **Module Management** - Create courses and assign them to programs
 - **Lecturer Management** - Add and manage lecturer details
+- **Lecturer Planner** - View lecturer-specific timetables and get suggested low-conflict test windows
+- **Lecturer Login Management** - Create lecturer login identifiers and credentials
 - **Venue Management** - Add classrooms and location information
 - **Schedule Creation** - Create timetables, assign lecturers and venues
 - **Exam Management** - Schedule exams and send notifications to students
+- **Assessment Coordination** - Publish lecturer tests with shared-course conflict awareness
 - **Bulk Operations** - Import/export large amounts of data efficiently
 - **Search & Filter** - Quickly find any information in the system
 
@@ -142,6 +146,27 @@ Before you begin, ensure you have the following installed:
    ```bash
    flutter run
    ```
+5. Run the lecturer app entrypoint (separate third app flow):
+   ```bash
+   flutter run -t lib/main_lecturer.dart
+   ```
+6. Run Android app flavors as separate installable apps:
+   ```bash
+   # Student app (default package)
+   flutter run --flavor student -t lib/main.dart
+
+   # Lecturer app (separate package/app on device)
+   flutter run --flavor lecturer -t lib/main_lecturer.dart
+   ```
+7. Build release APKs for both apps:
+   ```bash
+   flutter build apk --release --flavor student -t lib/main.dart
+   flutter build apk --release --flavor lecturer -t lib/main_lecturer.dart
+   ```
+8. Configure release signing:
+   - Copy `smart_timetable_application/android/key.properties.example` to `smart_timetable_application/android/key.properties`
+   - Put your keystore file in `smart_timetable_application/android/keystore/`
+   - Update `key.properties` with real passwords/alias
 
 ## 🔌 API Endpoints
 
@@ -149,14 +174,21 @@ The Flutter mobile app communicates with the backend through these REST API endp
 
 ### Authentication
 - `POST student_login_api.php` - Student login authentication
+- `POST lecturer_login_api.php` - Lecturer login authentication
 
 ### Timetable
 - `GET get_student_timetable.php?student_id={id}` - Retrieve student's class schedule
 - `GET get_student_exam_timetable.php?student_id={id}` - Retrieve exam schedule
+- `GET get_lecturer_timetable.php?lecturer_id={id}` - Retrieve lecturer's own timetable
 
 ### Modules
 - `GET student_modules_api.php?student_id={id}` - Get modules enrolled by student
 - `GET fetch_all_modules.php` - Get all available modules in the system
+
+### Lecturer Assessment Planning
+- `POST create_lecturer_assessment.php` - Publish lecturer test and queue student notifications
+- `GET get_shared_assessment_calendar.php?module_id={id}` - View shared-cohort exams/tests
+- `GET process_assessment_notifications.php` - Mark due D-7 / D-1 notifications as sent (for scheduled runner)
 
 ### Profile Management
 - `POST update_student_profile.php` - Update student information

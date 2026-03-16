@@ -17,7 +17,7 @@
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
-        android:label="Smart Timetable"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
