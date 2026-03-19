@@ -9,5 +9,5 @@ cmds = []
 cmds = ["bash build_railway.sh"]
 
 [start]
-cmd = "php -S 0.0.0.0:$PORT -t build/web"
+cmd = "sh -c 'php -S 0.0.0.0:${PORT} -t build/web'"
 

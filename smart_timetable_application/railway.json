@@ -5,7 +5,7 @@
     "buildCommand": "bash build_railway.sh"
   },
   "deploy": {
-    "startCommand": "php -S 0.0.0.0:$PORT -t build/web",
+    "startCommand": "sh -c 'php -S 0.0.0.0:${PORT} -t build/web'",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
